@@ -118,11 +118,11 @@ AI가 컨디션, 최근 RPE, 누적 피로 등을 종합하여 실시간으로 �
 ## 세션 상태 머신
 
 ### 상태
-- `pre_checkin` — 컨디션 체크 진행 중
+- `preCheckin` — 컨디션 체크 진행 중
 - `warmup` — 워밍업 가이드
-- `main_workout` — 세트 수행 중
+- `mainWorkout` — 세트 수행 중
 - `rest` — 세트 사이 휴식
-- `between_exercise` — 운동 간 전환
+- `betweenExercise` — 운동 간 전환
 - `cooldown` — 마무리
 - `completed` — 세션 완료
 - `paused` — 일시 중지
@@ -130,12 +130,12 @@ AI가 컨디션, 최근 RPE, 누적 피로 등을 종합하여 실시간으로 �
 
 ### 전이 트리거
 - **명시적 의도**: `StartSession`, `EndSession`, `PauseSession`, `CompleteSet` 등
-- **자동 전이**: 휴식 타이머 만료 → `main_workout`
+- **자동 전이**: 휴식 타이머 만료 → `mainWorkout`
 - **AI 결정**: 누적 피로 감지 → 종료/축소 제안
 
 ### 상태별 의도 유효성
 각 상태에서 허용되는 의도가 다르다.
-예: `main_workout`에서 `CompleteSet`는 가능, `StartSession`은 불가.
+예: `mainWorkout`에서 `CompleteSet`는 가능, `StartSession`은 불가.
 
 ## Program 구조
 
@@ -159,7 +159,8 @@ AI가 컨디션, 최근 RPE, 누적 피로 등을 종합하여 실시간으로 �
 ### 기반 데이터셋
 [hasaneyldrm/exercises-dataset](https://github.com/hasaneyldrm/exercises-dataset) — 1,324 운동, 10개 언어(한국어 포함), 이미지 + GIF 포함.
 
-### 데이터셋 제공 필드
+### 데이터셋 원본 필드 (snake_case)
+외부 데이터셋의 JSON 키는 snake_case를 유지. 적재 레이어에서 camelCase로 매핑.
 - `id`, `name`, `category`, `body_part`
 - `equipment` (15+ 유형: body weight, dumbbell, barbell, cable, machine 등)
 - `instructions` (다국어 텍스트)
@@ -167,16 +168,20 @@ AI가 컨디션, 최근 RPE, 누적 피로 등을 종합하여 실시간으로 �
 - `target` (주동근), `muscle_group` (협력근), `secondary_muscles` (부근)
 - `image` (180x180 정지), `gif_url` (애니메이션)
 
-### 우리 도메인이 추가할 메타 필드
-- `minimum_skill_level` — 초급/중급/상급 (안전성 필터링)
-- `contraindicated_body_parts` — 이 운동이 부담을 주는 신체 부위
-- `movement_pattern` — squat / hinge / push / pull / carry / lunge (프로그래밍에 필수)
+### 우리 도메인 필드 (camelCase)
+적재 레이어를 거친 후의 도메인 모델 필드.
+- `minimumSkillLevel` — 초급/중급/상급 (안전성 필터링)
+- `contraindicatedBodyParts` — 이 운동이 부담을 주는 신체 부위
+- `movementPattern` — squat / hinge / push / pull / carry / lunge (프로그래밍에 필수)
+- `performanceKind` — loadReps | time
+- `instructionsKo` (다국어 객체 `instructions.ko` 매핑), `instructionStepsKo`
+- `gifUrl`, `imagePath`
 
 ## 자세 교정 (Form Correction)
 
 ### A + B 전략
-- **A: 자가 리포트 + 텍스트 가이드** — `instruction_steps.ko`를 그대로 활용
-- **B: 참고 영상/이미지** — `image` + `gif_url` 활용. AI가 "이 영상 보고 따라해보세요" 식으로 안내
+- **A: 자가 리포트 + 텍스트 가이드** — `instructionStepsKo`를 그대로 활용
+- **B: 참고 영상/이미지** — `imagePath` + `gifUrl` 활용. AI가 "이 영상 보고 따라해보세요" 식으로 안내
 - **C(컴퓨터 비전)는 당분간 제외** — MVP 범위 밖, 후순위
 
 ## 부상/주의 부위 처리
@@ -200,20 +205,20 @@ AI가 컨디션, 최근 RPE, 누적 피로 등을 종합하여 실시간으로 �
 ## 운동의 성과 단위 (Performance Metric)
 
 ### 두 트랙 모델
-대부분의 운동은 **load_reps**, 일부는 **time** 기반.
+대부분의 운동은 **loadReps**, 일부는 **time** 기반.
 
 ```typescript
 type PerformanceMetric = 
-  | { kind: 'load_reps' }   // 기본 — 스쿼트, 벤치, 데드 등
+  | { kind: 'loadReps' }   // 기본 — 스쿼트, 벤치, 데드 등
   | { kind: 'time' }         // 플랭크, 워싯, 스트레치 등
 ```
 
 ### Exercise가 자기 단위를 선언
-- Exercise에 `performance_kind: 'load_reps' | 'time'` 필드 추가
-- AI 로직 (자동조절 등)은 `load_reps`에만 적용. `time` 기반은 별도 규칙.
+- Exercise에 `performanceKind: 'loadReps' | 'time'` 필드 추가
+- AI 로직 (자동조절 등)은 `loadReps`에만 적용. `time` 기반은 별도 규칙.
 
 ### 데이터셋 분포
-- 1,324개 중 ~1,195개 (90%): load_reps
+- 1,324개 중 ~1,195개 (90%): loadReps
 - ~100개 (8%): time 기반 (플랭크, 스트레치, isometric)
 - ~29개 (2%): cardio — 현 도메인 스코프 외
 
@@ -250,7 +255,7 @@ type PerformanceMetric =
 ## 목표 설정 (Goal Setting)
 
 ### 목표 종류
-- **Strength** — 운동별 e1RM / 1RM / nRM / weight_for_reps
+- **Strength** — 운동별 e1RM / 1RM / nRM / weightForReps
 - **Body Composition** — 체중 / 체지방률 / 둘레
 - **Volume** — 주간/월간 총 볼륨
 - **Qualitative** — 정성적 목표 (자유 텍스트)
@@ -259,7 +264,7 @@ type PerformanceMetric =
 - **e1RM** — Epley/Brzycki 공식으로 추정 (자동)
 - **1RM** — 실제 1RM 시도 기록 시
 - **nRM** — N회 최대 (예: 5RM)
-- **weight_for_reps** — "100kg × 5" 같은 조합 목표
+- **weightForReps** — "100kg × 5" 같은 조합 목표
 
 ### Body Comp 목표
 - 사용자 수동 입력 필요 (외부 측정값)
@@ -277,7 +282,7 @@ type PerformanceMetric =
 - `active` — 진행 중
 - `achieved` — 달성 (축하, 아카이브)
 - `abandoned` — 포기 (사유 기록, 아카이브)
-- `on_hold` — 일시 중지 (부상/생활 변화)
+- `onHold` — 일시 중지 (부상/생활 변화)
 
 ### 목표 vs 프로그램
 - 모든 Program은 Primary 목표를 가짐
@@ -291,4 +296,4 @@ type PerformanceMetric =
 
 ## 미정의 사항 (추후 결정)
 - [ ] 운동 종목 DB에 우리 메타 필드 추가
-- [ ] 운동의 성과 단위(load_reps/time)별 프로그래밍 로직 분리
+- [ ] 운동의 성과 단위(loadReps/time)별 프로그래밍 로직 분리
