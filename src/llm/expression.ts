@@ -62,5 +62,5 @@ export interface ExpressionLLM {
    * @param input - 결정 + 페르소나 + 세션 맥락
    * @returns 사용자에게 전달할 발화 텍스트
    */
-  express(input: ExpressionInput): Promise<string>;
+  express: (input: ExpressionInput) => Promise<string>;
 }

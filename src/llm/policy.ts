@@ -111,5 +111,5 @@ export interface PolicyLLM {
    * @param context - 현재 컨디션, 최근 세션 이력, 추세 분석
    * @returns 세션 방향 결정
    */
-  decide(context: PolicyContext): Promise<PolicyDecision>;
+  decide: (context: PolicyContext) => Promise<PolicyDecision>;
 }
