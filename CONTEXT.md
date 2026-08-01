@@ -229,17 +229,17 @@ type PerformanceMetric =
 - 추세 단위 — 최근 N세션 볼륨 추세, 운동별 RPE 추세, 누적 피로도, 휴식 일수
 
 ### 사용자 시각화용 메트릭 (외부)
-- 객관적 성취 — 운동별 PR, 주간/월간 총 볼륨, 부위별 볼륨 분포
+- 객관적 성취 — 운동별 Personal Record, 주간/월간 총 볼륨, 부위별 볼륨 분포
 - 행동적 지표 — 연속 출석(streak), 주간 완료율, 총 세션 수
 - 목표 추적 — 구체 목표(예: 100kg 스쿼트), 체중/체지방, 둘레
 
-### PR (Personal Record) — 모든 종류 추적/노출
+### Personal Record (개인 기록) — 모든 종류 추적/노출
 - **1RM** — 1회 최대 (실제 측정 or e1RM 추정)
-- **nRM** — n회 최대 (e.g., 100kg × 5회 PR)
+- **nRM** — n회 최대 (e.g., 100kg × 5회 Personal Record)
 - **e1RM** — Epley/Brzycki 공식으로 추정
-- **볼륨 PR** — 단일 세션 내 운동별 총 볼륨
-- **시간 PR** — time 기반 운동 (e.g., 플랭크 90초)
-- 모든 PR은 히스토리 보존 (현재 + 과거 기록 모두)
+- **볼륨 Personal Record** — 단일 세션 내 운동별 총 볼륨
+- **시간 Personal Record** — time 기반 운동 (e.g., 플랭크 90초)
+- 모든 Personal Record는 히스토리 보존 (현재 + 과거 기록 모두)
 
 ## 프로그램 히스토리 (Program History)
 
@@ -250,7 +250,7 @@ type PerformanceMetric =
 - 목표 변경 / 정체 / 시간 제약 변경 / 부상 / 계절적 / 단순 변심
 
 ### 보존 항목
-- 종료 사유, 종료 시점 상태(PR/볼륨/완료율), 세션 히스토리 전체
+- 종료 사유, 종료 시점 상태(Personal Record/볼륨/완료율), 세션 히스토리 전체
 
 ## 목표 설정 (Goal Setting)
 
