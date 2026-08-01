@@ -7,8 +7,8 @@
  * - 실제 LLM 호출 없이 PolicyLLM / ExpressionLLM 의존 코드 검증 가능
  */
 
-import type { PolicyLLM, PolicyContext, PolicyDecision } from './policy.ts';
-import type { ExpressionLLM, ExpressionInput } from './expression.ts';
+import type { ExpressionInput, ExpressionLLM } from './expression.ts';
+import type { PolicyContext, PolicyDecision, PolicyLLM } from './policy.ts';
 
 // ---------------------------------------------------------------------------
 // createFakePolicyLLM
@@ -37,20 +37,42 @@ export interface FakePolicyLLMOptions {
   defaultDecision?: PolicyDecision;
 }
 
-function matches(context: PolicyContext, when: FakePolicyRule['when']): boolean {
-  const c = context.condition;
-  const t = context.trends;
+const DEFAULT_FAKE_CONFIDENCE = 0.9;
 
-  if (when.maxFatigue !== undefined && c.fatigue > when.maxFatigue) return false;
-  if (when.minFatigue !== undefined && c.fatigue < when.minFatigue) return false;
-  if (when.maxPainLevel !== undefined && c.painLevel > when.maxPainLevel) return false;
-  if (when.minPainLevel !== undefined && c.painLevel < when.minPainLevel) return false;
-  if (when.minStagnationCount !== undefined && t.stagnationCount < when.minStagnationCount) return false;
-  if (when.maxStagnationCount !== undefined && t.stagnationCount > when.maxStagnationCount) return false;
-  if (when.minDaysSinceLastRest !== undefined && t.daysSinceLastRest < when.minDaysSinceLastRest) return false;
-  if (when.maxDaysSinceLastRest !== undefined && t.daysSinceLastRest > when.maxDaysSinceLastRest) return false;
-
+function isWithinRange(value: number, min?: number, max?: number): boolean {
+  if (min !== undefined && value < min) return false;
+  if (max !== undefined && value > max) return false;
   return true;
+}
+
+function matches(
+  context: PolicyContext,
+  when: FakePolicyRule['when'],
+): boolean {
+  const { condition, trends } = context;
+  const { fatigue, painLevel } = condition;
+  const { stagnationCount, daysSinceLastRest } = trends;
+
+  return (
+    isWithinRange(fatigue, when.minFatigue, when.maxFatigue) &&
+    isWithinRange(painLevel, when.minPainLevel, when.maxPainLevel) &&
+    isWithinRange(
+      stagnationCount,
+      when.minStagnationCount,
+      when.maxStagnationCount,
+    ) &&
+    isWithinRange(
+      daysSinceLastRest,
+      when.minDaysSinceLastRest,
+      when.maxDaysSinceLastRest,
+    )
+  );
+}
+
+function stripUndefinedDetails(decision: PolicyDecision): PolicyDecision {
+  const { details, ...rest } = decision;
+  if (details === undefined) return rest;
+  return { ...rest, details };
 }
 
 /**
@@ -69,22 +91,17 @@ export function createFakePolicyLLM(options?: FakePolicyLLMOptions): PolicyLLM {
   const defaultDecision = options?.defaultDecision ?? {
     kind: 'continue' as const,
     reasoning: 'Fake: 모든 조건이 정상 범위입니다.',
-    confidence: 0.9,
+    confidence: DEFAULT_FAKE_CONFIDENCE,
   };
 
   return {
     async decide(context: PolicyContext): Promise<PolicyDecision> {
-      for (const rule of rules) {
-        if (matches(context, rule.when)) {
-          const { details, ...rest } = rule.then;
-          return {
-            ...rest,
-            ...(details !== undefined ? { details } : {}),
-          };
-        }
-      }
-
-      return defaultDecision;
+      const matched = rules.find((rule) => matches(context, rule.when));
+      const result =
+        matched === undefined
+          ? defaultDecision
+          : stripUndefinedDetails(matched.then);
+      return await Promise.resolve(result);
     },
   };
 }
@@ -101,39 +118,44 @@ export interface FakeExpressionLLMOptions {
   fixedResponse?: string | undefined;
 }
 
+const DEFAULT_TEMPLATE = '[{{kind}}] {{reasoning}}';
+
+function fillTemplate(template: string, input: ExpressionInput): string {
+  const { decision, persona } = input;
+  const replacements: Record<string, string> = {
+    kind: decision.kind,
+    reasoning: decision.reasoning,
+    confidence: String(decision.confidence),
+    weightDelta: String(decision.details?.weightDelta ?? ''),
+    suggestedExercise: decision.details?.suggestedExercise ?? '',
+    personaName: persona.name,
+    personaTone: persona.tone,
+  };
+
+  let result = template;
+  for (const [key, value] of Object.entries(replacements)) {
+    result = result.replaceAll(`{{${key}}}`, value);
+  }
+
+  return result;
+}
+
 /**
  * Fake ExpressionLLM을 생성한다.
  *
  * 결정 정보를 템플릿에 채워 반환하거나, 고정 응답을 반환.
  * 실제 LLM 호출 없이 ExpressionLLM 의존 코드 검증 가능.
  */
-export function createFakeExpressionLLM(options?: FakeExpressionLLMOptions): ExpressionLLM {
-  const template = options?.template ?? '[{{kind}}] {{reasoning}}';
+export function createFakeExpressionLLM(
+  options?: FakeExpressionLLMOptions,
+): ExpressionLLM {
+  const template = options?.template ?? DEFAULT_TEMPLATE;
   const fixedResponse = options?.fixedResponse;
 
   return {
     async express(input: ExpressionInput): Promise<string> {
-      if (fixedResponse !== undefined) {
-        return fixedResponse;
-      }
-
-      const d = input.decision;
-      const replacements: Record<string, string> = {
-        kind: d.kind,
-        reasoning: d.reasoning,
-        confidence: String(d.confidence),
-        weightDelta: String(d.details?.weightDelta ?? ''),
-        suggestedExercise: d.details?.suggestedExercise ?? '',
-        personaName: input.persona.name,
-        personaTone: input.persona.tone,
-      };
-
-      let result = template;
-      for (const [key, value] of Object.entries(replacements)) {
-        result = result.replaceAll(`{{${key}}}`, value);
-      }
-
-      return result;
+      const result = fixedResponse ?? fillTemplate(template, input);
+      return await Promise.resolve(result);
     },
   };
 }
