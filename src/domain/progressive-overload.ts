@@ -18,7 +18,11 @@ export interface WeightAdjustment {
 }
 
 export type ProgressiveOverloadAction =
-  | { scope: 'inSession'; type: 'weightAdjustment'; adjustment: WeightAdjustment }
+  | {
+      scope: 'inSession';
+      type: 'weightAdjustment';
+      adjustment: WeightAdjustment;
+    }
   | {
       scope: 'betweenSessions';
       type: 'weightStartSuggestion';
