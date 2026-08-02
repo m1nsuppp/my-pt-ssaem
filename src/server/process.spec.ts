@@ -1,0 +1,86 @@
+/**
+ * 서버 브레인 스펙 — 발화 → 의도/결정/표현 + SSE 이벤트 방출의 공개 인터페이스 검증.
+ */
+import { describe, expect, test } from 'bun:test';
+import { DEFAULT_CHAT_STATE } from '../cli/scenarios.ts';
+import {
+  createFakeExpressionLLM,
+  createFakeIntentClassifier,
+} from '../llm/fake.ts';
+import type { ServerBrain } from './process.ts';
+import { chunkMessage, createServerBrain } from './process.ts';
+import type { SessionEvent, SessionStore } from './session-store.ts';
+import { createInMemorySessionStore } from './session-store.ts';
+
+function makeBrain(store = createInMemorySessionStore(DEFAULT_CHAT_STATE)): {
+  brain: ServerBrain;
+  store: SessionStore;
+} {
+  const brain = createServerBrain(
+    {
+      intent: createFakeIntentClassifier(),
+      expression: createFakeExpressionLLM(),
+    },
+    store,
+  );
+  return { brain, store };
+}
+
+describe('createServerBrain.processUtterance', () => {
+  test('CompleteSet 발화 → CompleteSet 의도 + continue 결정 + 표현 메시지', async () => {
+    const { brain } = makeBrain();
+    const result = await brain.processUtterance('123', '1세트 끝났어');
+
+    expect(result.sessionId).toBe('123');
+    expect(result.intent.kind).toBe('CompleteSet');
+    expect(result.decision.kind).toBe('continue');
+    expect(result.engineAction).toBeNull();
+    expect(result.message).toBe('[continue] 세트 완료 인지, 부하 조정은 없음');
+  });
+
+  test('CompleteSet 발화 후 recentHistory가 1 증가', async () => {
+    const { brain, store } = makeBrain();
+    await brain.processUtterance('123', '1세트 끝났어');
+    expect(store.session('123').state.recentHistory).toHaveLength(1);
+  });
+
+  test('비-CompleteSet 발화는 recentHistory를 늘리지 않음', async () => {
+    const { brain, store } = makeBrain();
+    await brain.processUtterance('123', '오늘 컨디션 좋아');
+    expect(store.session('123').state.recentHistory).toHaveLength(0);
+  });
+
+  test('message delta 이벤트 합침 == done.message (chunk 단위 SSE 전송 계약)', async () => {
+    const { brain, store } = makeBrain();
+    const deltas: string[] = [];
+    let doneMessage = '';
+    store.subscribe('123', (event: SessionEvent) => {
+      if (event.type === 'message') {
+        const { delta } = event;
+        deltas.push(delta);
+      } else if (event.type === 'done') {
+        const { message } = event;
+        doneMessage = message;
+      }
+    });
+
+    await brain.processUtterance('123', '1세트 끝났어');
+
+    expect(deltas.length).toBeGreaterThanOrEqual(1);
+    expect(deltas.join('')).toBe(doneMessage);
+  });
+});
+
+describe('chunkMessage', () => {
+  test('빈 문자열 → 빈 배열', () => {
+    expect(chunkMessage('')).toEqual([]);
+  });
+
+  test('여러 단어면 2개 이상 청크로 나뉨', () => {
+    const message =
+      '아주 훌륭합니다 이번 세트 잘 마무리했네요 이어서 다음 세트도 이어가볼까요';
+    const chunks = chunkMessage(message);
+    expect(chunks.length).toBeGreaterThanOrEqual(2);
+    expect(chunks.join('')).toBe(message);
+  });
+});
