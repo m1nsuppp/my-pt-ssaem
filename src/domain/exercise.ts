@@ -10,7 +10,13 @@
 export type SkillLevel = 'beginner' | 'intermediate' | 'advanced';
 
 /** 운동 패턴 — 프로그래밍 시 부위 균형에 필수 */
-export type MovementPattern = 'squat' | 'hinge' | 'push' | 'pull' | 'carry' | 'lunge';
+export type MovementPattern =
+  | 'squat'
+  | 'hinge'
+  | 'push'
+  | 'pull'
+  | 'carry'
+  | 'lunge';
 
 /** 성과 단위 — loadReps(무게×횟수) / time(시간) */
 export type PerformanceKind = 'loadReps' | 'time';

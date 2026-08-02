@@ -9,8 +9,8 @@
  * 사용 측 관점에서 설계: 메서드명과 시그니처만 보고 동작을 예측할 수 있어야 함.
  */
 
-import type { PolicyDecision } from './policy.ts';
 import type { Persona } from '../domain/persona.ts';
+import type { PolicyDecision } from './policy.ts';
 
 /** ExpressionLLM.express()의 입력 */
 export interface ExpressionInput {

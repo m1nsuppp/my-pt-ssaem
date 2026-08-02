@@ -4,7 +4,11 @@
  * CONTEXT "페르소나" 섹션에서 파생.
  * 기존 src/llm/expression.ts의 Persona를 단일 진실 원천으로 옮긴 것.
  */
-export type PersonaTone = 'motivational' | 'caring' | 'analytical' | 'challenging';
+export type PersonaTone =
+  | 'motivational'
+  | 'caring'
+  | 'analytical'
+  | 'challenging';
 
 export interface Persona {
   id: string;
