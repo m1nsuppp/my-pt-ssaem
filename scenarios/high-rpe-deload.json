@@ -1,0 +1,92 @@
+{
+  "name": "high-rpe-deload",
+  "program": {
+    "id": "p1",
+    "name": "demo strength",
+    "goal": "strength",
+    "experienceLevel": "beginner",
+    "durationWeeks": null,
+    "workoutsPerWeek": 3,
+    "workouts": [],
+    "split": "fullBody",
+    "periodization": "linear",
+    "status": "active",
+    "startedAt": "2026-01-01T00:00:00Z"
+  },
+  "exerciseId": "squat",
+  "rule": {
+    "thresholdRpe": 9,
+    "consecutiveSets": 3,
+    "deltaKg": -5,
+    "confidence": 0.9
+  },
+  "recentHistory": [
+    {
+      "id": "s1",
+      "sessionId": "ses1",
+      "exerciseId": "squat",
+      "setNumber": 1,
+      "plannedReps": 5,
+      "actualReps": 5,
+      "rpe": 9,
+      "completed": true,
+      "performedAt": "2026-01-01T00:00:00Z"
+    },
+    {
+      "id": "s2",
+      "sessionId": "ses1",
+      "exerciseId": "squat",
+      "setNumber": 2,
+      "plannedReps": 5,
+      "actualReps": 5,
+      "rpe": 9,
+      "completed": true,
+      "performedAt": "2026-01-01T00:01:00Z"
+    },
+    {
+      "id": "s3",
+      "sessionId": "ses1",
+      "exerciseId": "squat",
+      "setNumber": 3,
+      "plannedReps": 5,
+      "actualReps": 5,
+      "rpe": 9,
+      "completed": true,
+      "performedAt": "2026-01-01T00:02:00Z"
+    }
+  ],
+  "currentSet": { "reps": 5, "weightKg": 100 },
+  "persona": {
+    "id": "careful-coach",
+    "name": "케어형 코치",
+    "tone": "caring",
+    "description": "부드럽고 배려하는 코치",
+    "styleGuide": "부드럽고 배려하는 말투로, 회원의 컨디션을 먼저 살피며 조언한다."
+  },
+  "policy": {
+    "condition": {
+      "sleepHours": 6,
+      "fatigue": 8,
+      "painAreas": [],
+      "painLevel": 0,
+      "nutrition": "fair"
+    },
+    "sessionSummaries": [
+      {
+        "sessionId": "ses0",
+        "date": "2025-12-29T00:00:00Z",
+        "averageRPE": 9,
+        "totalVolume": 5500,
+        "completionRate": 1,
+        "endReason": "completed"
+      }
+    ],
+    "trends": {
+      "volumeTrend": "stable",
+      "rpeTrend": "increasing",
+      "stagnationCount": 2,
+      "accumulatedFatigue": 0.7,
+      "daysSinceLastRest": 6
+    }
+  }
+}
