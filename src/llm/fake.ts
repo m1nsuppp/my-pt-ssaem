@@ -7,7 +7,9 @@
  * - 실제 LLM 호출 없이 PolicyLLM / ExpressionLLM 의존 코드 검증 가능
  */
 
+import type { Intent, NormalizedUtterance } from '../domain/intent.ts';
 import type { ExpressionInput, ExpressionLLM } from './expression.ts';
+import type { IntentClassifier } from './intent.ts';
 import type { PolicyContext, PolicyDecision, PolicyLLM } from './policy.ts';
 
 // ---------------------------------------------------------------------------
@@ -156,6 +158,83 @@ export function createFakeExpressionLLM(
     async express(input: ExpressionInput): Promise<string> {
       const result = fixedResponse ?? fillTemplate(template, input);
       return await Promise.resolve(result);
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// createFakeIntentClassifier
+// ---------------------------------------------------------------------------
+
+/**
+ * Fake IntentClassifier를 생성한다.
+ *
+ * 키워드→Intent 결정적 매핑(첫 매칭 우선, 대소문자 무시):
+ *
+ * | 키워드 포함                        | Intent                |
+ * |------------------------------------|-----------------------|
+ * | 시작 / start                       | StartSession          |
+ * | 끝났 / 완료 / 했어 / 했다          | CompleteSet           |
+ * | 늘려 / 증가 / 올려                 | IncreaseLoad          |
+ * | 줄여 / 감소 / 내려                 | DecreaseLoad          |
+ * | 무게 <숫자>[kg]                    | SetLoadTo{valueKg}    |
+ * | rpe <숫자>                         | ReportRPE{rpe}        |
+ * | 종료 / end                         | EndSession            |
+ * | (기본)                             | AskQuestion           |
+ *
+ * 실제 LLM 호출 없이 IntentClassifier 의존 코드 검증 가능.
+ */
+const WEIGHT_PATTERN = /무게\s*(?<weight>\d+)\s*(?:kg)?/iv;
+const RPE_PATTERN = /rpe\s*(?<rpe>\d+)/iv;
+
+function containsAny(lower: string, keywords: readonly string[]): boolean {
+  return keywords.some((keyword) => lower.includes(keyword));
+}
+
+function matchKeywordIntent(lower: string): Intent | null {
+  if (containsAny(lower, ['시작', 'start'])) return { kind: 'StartSession' };
+  if (containsAny(lower, ['끝났', '완료', '했어', '했다'])) {
+    return { kind: 'CompleteSet' };
+  }
+  if (containsAny(lower, ['늘려', '증가', '올려'])) {
+    return { kind: 'IncreaseLoad' };
+  }
+  if (containsAny(lower, ['줄여', '감소', '내려'])) {
+    return { kind: 'DecreaseLoad' };
+  }
+  if (containsAny(lower, ['종료', 'end'])) return { kind: 'EndSession' };
+  return null;
+}
+
+function matchNumberIntent(lower: string): Intent | null {
+  const weightMatch = WEIGHT_PATTERN.exec(lower);
+  if (weightMatch !== null) {
+    return {
+      kind: 'SetLoadTo',
+      valueKg: Number(weightMatch.groups?.weight ?? 0),
+    };
+  }
+
+  const rpeMatch = RPE_PATTERN.exec(lower);
+  if (rpeMatch !== null) {
+    return { kind: 'ReportRPE', rpe: Number(rpeMatch.groups?.rpe ?? 0) };
+  }
+  return null;
+}
+
+function matchIntent(utterance: NormalizedUtterance): Intent {
+  const lower = utterance.text.toLowerCase();
+  const keywordIntent = matchKeywordIntent(lower);
+  if (keywordIntent !== null) return keywordIntent;
+  const numberIntent = matchNumberIntent(lower);
+  if (numberIntent !== null) return numberIntent;
+  return { kind: 'AskQuestion', text: utterance.text };
+}
+
+export function createFakeIntentClassifier(): IntentClassifier {
+  return {
+    async classify(utterance: NormalizedUtterance): Promise<Intent> {
+      return await Promise.resolve(matchIntent(utterance));
     },
   };
 }
