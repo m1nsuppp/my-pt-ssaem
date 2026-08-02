@@ -20,7 +20,7 @@ Commands:
 
 Options:
   -s, --scenario <name>   Scenario name (default: none; required for simulate)
-  -m, --model <model>     LLM model (default: $OPENROUTER_MODEL or anthropic/claude-haiku-4.5)
+  -m, --model <model>     LLM model (default: $OPENROUTER_MODEL or deepseek/deepseek-v4-flash-0731)
       --llm               Use Policy + Expression LLM layers (simulate only)
   -j, --json              Output each event as a JSON line
   -q, --quiet             Suppress all output
@@ -33,7 +33,7 @@ Examples:
   my-pt-ssaem chat "1세트 끝났어"
 `.trim();
 
-const DEFAULT_MODEL = 'anthropic/claude-haiku-4.5';
+const DEFAULT_MODEL = 'deepseek/deepseek-v4-flash-0731';
 const CLI_ARG_START = 2;
 
 type OutputMode = 'text' | 'json' | 'quiet';

@@ -15,7 +15,7 @@ import type { ServerBrain } from './server/process.ts';
 import { createServerBrain } from './server/process.ts';
 import { createInMemorySessionStore } from './server/session-store.ts';
 
-const DEFAULT_MODEL = 'anthropic/claude-haiku-4.5';
+const DEFAULT_MODEL = 'deepseek/deepseek-v4-flash-0731';
 const DEFAULT_PORT = 3000;
 const KIB = 1024;
 const MAX_BODY = KIB * KIB;
