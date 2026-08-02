@@ -5,10 +5,11 @@
  * 모델 변경, temperature, maxCost 등은 이 레이어 내부에 캡슐화한다.
  */
 
-import type { OpenRouter } from '@openrouter/agent';
-import { callModel, maxCost } from '@openrouter/agent';
+import { callModel, maxCost, OpenRouter } from '@openrouter/agent';
 import { z } from 'zod';
+import type { Intent, NormalizedUtterance } from '../../domain/intent.ts';
 import type { ExpressionInput, ExpressionLLM } from '../expression.ts';
+import type { IntentClassifier } from '../intent.ts';
 import type {
   PolicyContext,
   PolicyDecision,
@@ -38,6 +39,8 @@ const DEFAULT_POLICY_TEMPERATURE = 0.7;
 const DEFAULT_POLICY_MAX_TOKENS = 500;
 const DEFAULT_EXPRESS_TEMPERATURE = 0.8;
 const DEFAULT_EXPRESS_MAX_TOKENS = 300;
+const DEFAULT_INTENT_TEMPERATURE = 0;
+const DEFAULT_INTENT_MAX_TOKENS = 120;
 const FALLBACK_CONFIDENCE = 0.3;
 const FALLBACK_CONFIDENCE_PARSED = 0.5;
 const PERCENT_MULTIPLIER = 100;
@@ -75,6 +78,16 @@ const DECISION_SYSTEM_PROMPT = [
   '    "pauseMinutes": 5 (pause인 경우)',
   '  }',
   '}',
+].join('\n');
+
+const OPENROUTER_INTENT_SYSTEM_PROMPT = [
+  '발화를 분류해 JSON으로 반환하라.',
+  'kind는 [startSession|completeSet|increaseLoad|decreaseLoad|setLoadTo|reportRPE|endSession|askQuestion] 중 하나.',
+  '',
+  'setLoadTo인 경우 valueKg(kg)을, reportRPE인 경우 rpe(1~10)를 포함하라.',
+  'JSON 형식:',
+  '{ "kind": "setLoadTo", "valueKg": 100 }',
+  '{ "kind": "reportRPE", "rpe": 8 }',
 ].join('\n');
 
 const CONTINUE_DECISION: PolicyDecision = {
@@ -351,5 +364,124 @@ export function createOpenRouterExpressionLLM(
 
       return await result.getText();
     },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// createOpenRouterIntentClassifier
+// ---------------------------------------------------------------------------
+
+const intentKindSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('startSession') }),
+  z.object({ kind: z.literal('completeSet') }),
+  z.object({ kind: z.literal('increaseLoad') }),
+  z.object({ kind: z.literal('decreaseLoad') }),
+  z.object({ kind: z.literal('setLoadTo'), valueKg: z.number() }),
+  z.object({ kind: z.literal('reportRPE'), rpe: z.number() }),
+  z.object({ kind: z.literal('endSession') }),
+  z.object({ kind: z.literal('askQuestion') }),
+]);
+
+function parseIntent(text: string, utterance: NormalizedUtterance): Intent {
+  try {
+    const jsonText = extractJsonText(text);
+    const parsed = intentKindSchema.safeParse(JSON.parse(jsonText));
+    if (!parsed.success) {
+      return { kind: 'AskQuestion', text: utterance.text };
+    }
+    switch (parsed.data.kind) {
+      case 'startSession':
+        return { kind: 'StartSession' };
+      case 'completeSet':
+        return { kind: 'CompleteSet' };
+      case 'increaseLoad':
+        return { kind: 'IncreaseLoad' };
+      case 'decreaseLoad':
+        return { kind: 'DecreaseLoad' };
+      case 'setLoadTo':
+        return { kind: 'SetLoadTo', valueKg: parsed.data.valueKg };
+      case 'reportRPE':
+        return { kind: 'ReportRPE', rpe: parsed.data.rpe };
+      case 'endSession':
+        return { kind: 'EndSession' };
+      case 'askQuestion':
+        return { kind: 'AskQuestion', text: utterance.text };
+    }
+  } catch {
+    return { kind: 'AskQuestion', text: utterance.text };
+  }
+}
+
+/**
+ * OpenRouter 기반 IntentClassifier를 생성한다.
+ *
+ * 정규화된 사용자 발화를 도메인 Intent로 분류한다.
+ */
+export function createOpenRouterIntentClassifier(
+  config: OpenRouterLLMConfig,
+): IntentClassifier {
+  return {
+    async classify(utterance: NormalizedUtterance): Promise<Intent> {
+      const result = callModel(config.client, {
+        model: config.model,
+        instructions: OPENROUTER_INTENT_SYSTEM_PROMPT,
+        input: utterance.text,
+        temperature: DEFAULT_INTENT_TEMPERATURE,
+        maxOutputTokens: config.maxTokens ?? DEFAULT_INTENT_MAX_TOKENS,
+        ...(config.maxCost === undefined
+          ? {}
+          : { stopWhen: [maxCost(config.maxCost)] }),
+      });
+
+      const text = await result.getText();
+      return parseIntent(text, utterance);
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// createOpenRouterLLMs
+// ---------------------------------------------------------------------------
+
+/** createOpenRouterLLMs 생성 옵션 */
+export interface OpenRouterLLMsConfig {
+  /** OpenRouter API 키 */
+  apiKey: string;
+  /** 사용할 모델 ID */
+  model: string;
+  /** temperature (0.0 ~ 2.0) */
+  temperature?: number;
+  /** 최대 토큰 수 */
+  maxTokens?: number;
+  /** 최대 비용 (USD) */
+  maxCost?: number;
+}
+
+/**
+ * 하나의 OpenRouter 클라이언트로 모든 LLM 계층(Policy/Expression/Intent)을 생성한다.
+ *
+ * 클라이언트 생성과 모델 설정을 LLM 레이어 내부로 캡슐화해,
+ * CLI/도메인 계층에서 OpenRouter를 직접 다루지 않도록 한다.
+ */
+export function createOpenRouterLLMs(config: OpenRouterLLMsConfig): {
+  policy: PolicyLLM;
+  expression: ExpressionLLM;
+  intent: IntentClassifier;
+} {
+  const client = new OpenRouter({ apiKey: config.apiKey });
+  const llmConfig: OpenRouterLLMConfig = {
+    client,
+    model: config.model,
+    ...(config.temperature === undefined
+      ? {}
+      : { temperature: config.temperature }),
+    ...(config.maxTokens === undefined ? {} : { maxTokens: config.maxTokens }),
+    ...(config.maxCost === undefined ? {} : { maxCost: config.maxCost }),
+  };
+
+  return {
+    policy: createOpenRouterPolicyLLM(llmConfig),
+    expression: createOpenRouterExpressionLLM(llmConfig),
+    intent: createOpenRouterIntentClassifier(llmConfig),
   };
 }
