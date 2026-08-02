@@ -10,6 +10,7 @@
  */
 
 import type { PolicyDecision } from './policy.ts';
+import type { Persona } from '../domain/persona.ts';
 
 /** ExpressionLLM.express()의 입력 */
 export interface ExpressionInput {
@@ -21,19 +22,7 @@ export interface ExpressionInput {
   sessionContext?: SessionContext;
 }
 
-/** AI 코치 페르소나 — 성격/말투를 정의 */
-export interface Persona {
-  /** 페르소나 식별자 */
-  id: string;
-  /** 페르소나 이름 */
-  name: string;
-  /** 말투 유형 */
-  tone: 'motivational' | 'caring' | 'analytical' | 'challenging';
-  /** 페르소나에 대한 자연어 설명 */
-  description: string;
-  /** 말투 스타일 가이드 (LLM에 전달할 시스템 프롬프트 조각) */
-  styleGuide: string;
-}
+/** AI 코치 페르소나 — 성격/말투를 정의 (도메인 src/domain/persona.ts) */
 
 /** 현재 세션 맥락 */
 export interface SessionContext {

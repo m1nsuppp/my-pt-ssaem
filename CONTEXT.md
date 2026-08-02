@@ -115,6 +115,10 @@ AI가 컨디션, 최근 RPE, 누적 피로 등을 종합하여 실시간으로 �
 3. **프로그램 자동조절** — 전체 프로그램을 재설계
    - 예: 스쿼트 3주 정체 → 변형 운동(프론트 스쿼트)으로 교체 제안
 
+#### 스코프 타입 (이슈 5)
+- `OverloadScope` — `inSession | betweenSessions | program` (위 3개 스코프에 대응)
+- 의사결정 액션: inSession·betweenSessions은 `WeightAdjustment`, program은 `ExerciseSwap`
+
 ## 세션 상태 머신
 
 ### 상태
@@ -176,6 +180,12 @@ AI가 컨디션, 최근 RPE, 누적 피로 등을 종합하여 실시간으로 �
 - `performanceKind` — loadReps | time
 - `instructionsKo` (다국어 객체 `instructions.ko` 매핑), `instructionStepsKo`
 - `gifUrl`, `imagePath`
+
+#### 도메인 타입 확정 (이슈 5)
+- `Equipment` 유니온 — `bodyWeight | dumbbell | barbell | cable | machine | kettlebell | resistanceBand | pullUpBar | bench | mat`
+- `MovementPattern` 유니온 — `squat | hinge | push | pull | carry | lunge`
+- `BodyPart` — CONTEXT가 부위 taxonomy를 정의하지 않아 구체 유니온을 발명하지 않고 `string`으로 둠
+- `performanceKind` — `'loadReps' | 'time'` (CONTEXT "운동의 성과 단위"와 일치)
 
 ## 자세 교정 (Form Correction)
 

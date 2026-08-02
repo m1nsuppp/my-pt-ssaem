@@ -9,6 +9,8 @@
  * 사용 측 관점에서 설계: 메서드명과 시그니처만 보고 동작을 예측할 수 있어야 함.
  */
 
+import type { ConditionCheck } from '../domain/condition-check.ts';
+
 /** PolicyLLM.decide()의 입력 맥락 */
 export interface PolicyContext {
   /** 세션 시작 전 컨디션 체크 결과 */
@@ -19,21 +21,7 @@ export interface PolicyContext {
   trends: TrendAnalysis;
 }
 
-/** 컨디션 체크 — 세션 시작 전 회원의 현재 상태 */
-export interface ConditionCheck {
-  /** 수면 시간 (시간) */
-  sleepHours: number;
-  /** 주관적 피로도 (1~10, 10이 가장 피로) */
-  fatigue: number;
-  /** 보고된 통증 부위 */
-  painAreas: string[];
-  /** 통증 강도 (1~10, 0 = 통증 없음) */
-  painLevel: number;
-  /** 영양 상태 (좋음/보통/나쁨) */
-  nutrition: 'good' | 'fair' | 'poor';
-  /** 자유 텍스트 메모 */
-  notes?: string;
-}
+/** 컨디션 체크 — 도메인 src/domain/condition-check.ts */
 
 /** 세션 요약 — 완료된 세션의 핵심 지표 */
 export interface SessionSummary {
