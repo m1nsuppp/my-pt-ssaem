@@ -99,7 +99,9 @@ export function nextSessionState(
   current: SessionState,
   trigger: TransitionTrigger,
 ): SessionState | null {
-  if (TERMINAL_STATES.includes(current)) return null;
+  if (TERMINAL_STATES.includes(current)) {
+    return null;
+  }
 
   if (trigger === 'EndSession') {
     return current === SessionState.Cooldown
@@ -134,13 +136,18 @@ export function applyTransition(
   trigger: TransitionTrigger,
 ): SessionStateContext {
   if (trigger === 'ResumeSession') {
-    if (context.currentState !== SessionState.Paused) return context;
+    if (context.currentState !== SessionState.Paused) {
+      return context;
+    }
     const { pausedFrom, ...rest } = context;
+
     return { ...rest, currentState: pausedFrom ?? SessionState.MainWorkout };
   }
 
   const next = nextSessionState(context.currentState, trigger);
-  if (next === null) return context;
+  if (next === null) {
+    return context;
+  }
 
   if (next === SessionState.Paused) {
     return { ...context, currentState: next, pausedFrom: context.currentState };

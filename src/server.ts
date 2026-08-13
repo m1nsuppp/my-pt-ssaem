@@ -69,7 +69,10 @@ function unauthorized(): Response {
 }
 
 function checkAuth(req: Request): boolean {
-  if (API_SECRET === undefined || API_SECRET === '') return true;
+  if (API_SECRET === undefined || API_SECRET === '') {
+    return true;
+  }
+
   return req.headers.get('Authorization') === `Bearer ${API_SECRET}`;
 }
 
@@ -93,6 +96,7 @@ const brain: ServerBrain = FAKE
         apiKey: apiKeyEnv,
         model: MODEL,
       });
+
       return createServerBrain({ intent, expression }, store);
     })();
 
@@ -119,6 +123,7 @@ async function readUtteranceBody(req: Request): Promise<UtteranceBody> {
   if (!parsed.success || parsed.data.text.trim() === '') {
     return { ok: false, error: 'textRequired' };
   }
+
   return { ok: true, text: parsed.data.text };
 }
 
@@ -132,11 +137,13 @@ async function handleUtterance(id: string, req: Request): Promise<Response> {
   if (!body.ok) {
     const message =
       body.error === 'invalidJson' ? 'Invalid JSON' : 'text is required';
+
     return json({ error: message }, STATUS_BAD_REQUEST);
   }
 
   try {
     const result = await brain.processUtterance(id, body.text);
+
     return json({
       sessionId: result.sessionId,
       intent: result.intent,
@@ -146,6 +153,7 @@ async function handleUtterance(id: string, req: Request): Promise<Response> {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+
     return json({ error: message }, STATUS_INTERNAL_ERROR);
   }
 }
@@ -181,8 +189,11 @@ function handleStream(id: string): Response {
 }
 
 function handleCreateSession(req: Request): Response {
-  if (!checkAuth(req)) return unauthorized();
+  if (!checkAuth(req)) {
+    return unauthorized();
+  }
   const sessionId = store.createSession();
+
   return json({ sessionId }, STATUS_CREATED);
 }
 
@@ -205,6 +216,7 @@ function matchRoute(pathname: string): ServerRoute | null {
       sessionId: decodeURIComponent(stream.groups?.sessionId ?? ''),
     };
   }
+
   return null;
 }
 
@@ -212,10 +224,13 @@ async function dispatchRoute(
   route: ServerRoute,
   req: Request,
 ): Promise<Response> {
-  if (!checkAuth(req)) return unauthorized();
+  if (!checkAuth(req)) {
+    return unauthorized();
+  }
   if (route.kind === 'utterance') {
     return await handleUtterance(route.sessionId, req);
   }
+
   return handleStream(route.sessionId);
 }
 
@@ -244,6 +259,7 @@ Bun.serve({
     if (route === null) {
       return json({ error: 'Not found' }, STATUS_NOT_FOUND);
     }
+
     return await dispatchRoute(route, req);
   },
 });

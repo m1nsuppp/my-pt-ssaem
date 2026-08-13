@@ -48,6 +48,7 @@ async function say(
     input.context = context;
     results.push(result);
   }
+
   return results;
 }
 

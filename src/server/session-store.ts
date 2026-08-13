@@ -78,6 +78,7 @@ export function createInMemorySessionStore(
       };
       records.set(id, record);
     }
+
     return record;
   }
 
@@ -92,16 +93,22 @@ export function createInMemorySessionStore(
     },
     updateContext(id: string, context: SessionStateContext): void {
       const record = records.get(id);
-      if (record === undefined) return;
+      if (record === undefined) {
+        return;
+      }
       record.context = context;
     },
     pushEvent(id: string, event: SessionEvent): void {
       const record = records.get(id);
-      if (record === undefined) return;
+      if (record === undefined) {
+        return;
+      }
       record.events.push(event);
 
       const set = subscribers.get(id);
-      if (set === undefined) return;
+      if (set === undefined) {
+        return;
+      }
       for (const onEvent of set) {
         try {
           onEvent(event);
@@ -113,7 +120,9 @@ export function createInMemorySessionStore(
     subscribe(id: string, onEvent: (event: SessionEvent) => void): () => void {
       const record = records.get(id);
       if (record !== undefined) {
-        for (const event of record.events) onEvent(event);
+        for (const event of record.events) {
+          onEvent(event);
+        }
       }
 
       let set = subscribers.get(id);

@@ -50,11 +50,15 @@ export function createRpeDeloadRule(config: RpeDeloadRuleConfig = {}): Rule {
         const matches =
           set.completed && set.rpe !== undefined && set.rpe >= thresholdRpe;
 
-        if (!matches) break;
+        if (!matches) {
+          break;
+        }
         count += 1;
       }
 
-      if (count < consecutiveSets) return null;
+      if (count < consecutiveSets) {
+        return null;
+      }
 
       return {
         scope: 'inSession',

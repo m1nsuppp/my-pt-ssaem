@@ -161,6 +161,7 @@ function toScenarioState(parsed: RawScenario): ScenarioState {
 async function parseScenarioFile(name: string): Promise<RawScenario> {
   try {
     const raw: unknown = await Bun.file(`scenarios/${name}.json`).json();
+
     return scenarioSchema.parse(raw);
   } catch (err) {
     throw new Error(`시나리오를 찾을 수 없습니다: ${name}`, { cause: err });

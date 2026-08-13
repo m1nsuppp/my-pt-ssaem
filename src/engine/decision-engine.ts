@@ -47,8 +47,11 @@ export function createDecisionEngine(rules: Rule[]): DecisionEngine {
     decide(input: DecisionInput): ProgressiveOverloadAction | null {
       for (const rule of rules) {
         const action = rule.apply(input);
-        if (action !== null) return action;
+        if (action !== null) {
+          return action;
+        }
       }
+
       return null;
     },
   };

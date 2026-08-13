@@ -92,6 +92,7 @@ async function buildMessage(
       persona: state.persona,
     });
   }
+
   return formatEngineAction(engineAction);
 }
 

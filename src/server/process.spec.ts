@@ -23,6 +23,7 @@ function makeBrain(store = createInMemorySessionStore(DEFAULT_CHAT_STATE)): {
     },
     store,
   );
+
   return { brain, store };
 }
 

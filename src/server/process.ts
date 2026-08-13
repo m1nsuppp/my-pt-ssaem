@@ -49,7 +49,10 @@ export function chunkMessage(message: string): string[] {
       current = candidate;
     }
   }
-  if (current !== '') chunks.push(current);
+  if (current !== '') {
+    chunks.push(current);
+  }
+
   return chunks;
 }
 

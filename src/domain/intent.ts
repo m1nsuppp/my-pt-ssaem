@@ -40,5 +40,6 @@ export interface NormalizedUtterance {
 /** 발화를 정규화한다 — trim 후 연속 공백을 단일 공백으로 축소. */
 export function normalizeUtterance(raw: string): NormalizedUtterance {
   const text = raw.trim().replace(/\s+/gv, ' ');
+
   return { raw, text };
 }

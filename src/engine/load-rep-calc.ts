@@ -43,6 +43,7 @@ export function estimateE1rm(
       if (reps >= BRZYCKI_MAX_REPS) {
         throw new RangeError('Brzycki invalid for reps >= 37');
       }
+
       return (weightKg * BRZYCKI_NUMERATOR) / (BRZYCKI_MAX_REPS - reps);
   }
 }

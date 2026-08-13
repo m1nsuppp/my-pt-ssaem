@@ -49,7 +49,9 @@ export function createRpeProgressionRule(
     name: 'rpe-progression',
     apply(input: DecisionInput) {
       const { currentSet } = input;
-      if (currentSet.weightKg === null) return null;
+      if (currentSet.weightKg === null) {
+        return null;
+      }
 
       let count = 0;
       for (const set of input.recentHistory.slice().reverse()) {
@@ -59,11 +61,15 @@ export function createRpeProgressionRule(
           set.rpe <= ceilingRpe &&
           set.actualReps >= currentSet.reps;
 
-        if (!matches) break;
+        if (!matches) {
+          break;
+        }
         count += 1;
       }
 
-      if (count < consecutiveSets) return null;
+      if (count < consecutiveSets) {
+        return null;
+      }
 
       return {
         scope: 'inSession',

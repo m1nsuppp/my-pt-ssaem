@@ -130,6 +130,7 @@ function buildConditionLines(context: PolicyContext): string[] {
   if (condition.notes !== undefined) {
     lines.push(`- 메모: ${condition.notes}`);
   }
+
   return lines;
 }
 
@@ -139,6 +140,7 @@ function buildHistoryLines(context: PolicyContext): string[] {
       .toISOString()
       .slice(STRING_START_INDEX, DATE_STRING_LENGTH);
     const completionPct = Math.round(s.completionRate * PERCENT_MULTIPLIER);
+
     return [
       `[세션 ${i + DISPLAY_OFFSET}] ${dateStr}`,
       `  RPE: ${s.averageRPE}/${RPE_SCALE_MAX}, 볼륨: ${s.totalVolume}kg, 완료율: ${completionPct}%`,
@@ -150,6 +152,7 @@ function buildHistoryLines(context: PolicyContext): string[] {
 function buildTrendLines(context: PolicyContext): string[] {
   const { trends } = context;
   const fatiguePct = Math.round(trends.accumulatedFatigue * PERCENT_MULTIPLIER);
+
   return [
     '## 추세',
     `- 볼륨 추세: ${trends.volumeTrend}`,
@@ -178,6 +181,7 @@ function extractJsonText(text: string): string {
   if (matchResult !== null) {
     return matchResult[REGEX_FULL_MATCH_INDEX];
   }
+
   return text;
 }
 
@@ -213,7 +217,9 @@ function parseDecision(text: string): PolicyDecision {
     } = raw;
     const validatedKind = decisionKindSchema.safeParse(kind);
 
-    if (!validatedKind.success) return CONTINUE_DECISION;
+    if (!validatedKind.success) {
+      return CONTINUE_DECISION;
+    }
 
     return {
       kind: validatedKind.data,
@@ -250,6 +256,7 @@ export function createOpenRouterPolicyLLM(
       });
 
       const text = await result.getText();
+
       return parseDecision(text);
     },
   };
@@ -310,7 +317,9 @@ function buildDecisionDetailLines(decision: PolicyDecision): string[] {
 function buildSessionContextLines(
   sessionContext: ExpressionInput['sessionContext'],
 ): string[] {
-  if (sessionContext === undefined) return [];
+  if (sessionContext === undefined) {
+    return [];
+  }
 
   const {
     sessionState,
@@ -460,6 +469,7 @@ export function createOpenRouterIntentClassifier(
       });
 
       const text = await result.getText();
+
       return parseIntent(text, utterance);
     },
   };

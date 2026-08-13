@@ -42,8 +42,13 @@ export interface FakePolicyLLMOptions {
 const DEFAULT_FAKE_CONFIDENCE = 0.9;
 
 function isWithinRange(value: number, min?: number, max?: number): boolean {
-  if (min !== undefined && value < min) return false;
-  if (max !== undefined && value > max) return false;
+  if (min !== undefined && value < min) {
+    return false;
+  }
+  if (max !== undefined && value > max) {
+    return false;
+  }
+
   return true;
 }
 
@@ -73,7 +78,10 @@ function matches(
 
 function stripUndefinedDetails(decision: PolicyDecision): PolicyDecision {
   const { details, ...rest } = decision;
-  if (details === undefined) return rest;
+  if (details === undefined) {
+    return rest;
+  }
+
   return { ...rest, details };
 }
 
@@ -103,6 +111,7 @@ export function createFakePolicyLLM(options?: FakePolicyLLMOptions): PolicyLLM {
         matched === undefined
           ? defaultDecision
           : stripUndefinedDetails(matched.then);
+
       return await Promise.resolve(result);
     },
   };
@@ -157,6 +166,7 @@ export function createFakeExpressionLLM(
   return {
     async express(input: ExpressionInput): Promise<string> {
       const result = fixedResponse ?? fillTemplate(template, input);
+
       return await Promise.resolve(result);
     },
   };
@@ -203,7 +213,9 @@ function containsAny(lower: string, keywords: readonly string[]): boolean {
 }
 
 function matchKeywordIntent(lower: string): Intent | null {
-  if (containsAny(lower, ['시작', 'start'])) return { kind: 'StartSession' };
+  if (containsAny(lower, ['시작', 'start'])) {
+    return { kind: 'StartSession' };
+  }
   if (containsAny(lower, ['끝났', '완료', '했어', '했다'])) {
     return { kind: 'CompleteSet' };
   }
@@ -213,13 +225,16 @@ function matchKeywordIntent(lower: string): Intent | null {
   if (containsAny(lower, ['줄여', '감소', '내려'])) {
     return { kind: 'DecreaseLoad' };
   }
-  if (containsAny(lower, ['종료', 'end'])) return { kind: 'EndSession' };
+  if (containsAny(lower, ['종료', 'end'])) {
+    return { kind: 'EndSession' };
+  }
   if (containsAny(lower, ['잠깐', '멈춰', '일시정지', 'pause'])) {
     return { kind: 'PauseSession' };
   }
   if (containsAny(lower, ['재개', '다시 하자', 'resume'])) {
     return { kind: 'ResumeSession' };
   }
+
   return null;
 }
 
@@ -236,6 +251,7 @@ function matchNumberIntent(lower: string): Intent | null {
   if (rpeMatch !== null) {
     return { kind: 'ReportRPE', rpe: Number(rpeMatch.groups?.rpe ?? 0) };
   }
+
   return null;
 }
 
@@ -244,9 +260,12 @@ function matchNumberIntent(lower: string): Intent | null {
  * 값을 지어내지 않고, 되묻기는 결정 계층의 몫이다.
  */
 function matchPainIntent(lower: string): Intent | null {
-  if (!PAIN_PATTERN.test(lower)) return null;
+  if (!PAIN_PATTERN.test(lower)) {
+    return null;
+  }
 
   const levelMatch = PAIN_LEVEL_PATTERN.exec(lower);
+
   return {
     kind: 'ReportPain',
     areas: BODY_PARTS.filter((part) => lower.includes(part)),
@@ -258,11 +277,18 @@ function matchIntent(utterance: NormalizedUtterance): Intent {
   const lower = utterance.text.toLowerCase();
   // 통증은 안전 의도라 다른 키워드보다 먼저 본다 ("어깨 아파서 못 했어" 같은 복합 발화).
   const painIntent = matchPainIntent(lower);
-  if (painIntent !== null) return painIntent;
+  if (painIntent !== null) {
+    return painIntent;
+  }
   const keywordIntent = matchKeywordIntent(lower);
-  if (keywordIntent !== null) return keywordIntent;
+  if (keywordIntent !== null) {
+    return keywordIntent;
+  }
   const numberIntent = matchNumberIntent(lower);
-  if (numberIntent !== null) return numberIntent;
+  if (numberIntent !== null) {
+    return numberIntent;
+  }
+
   return { kind: 'AskQuestion', text: utterance.text };
 }
 

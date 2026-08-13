@@ -57,7 +57,9 @@ const LOAD_STEP_KG = 5;
  */
 function changeWeight(state: ScenarioState, nextWeightKg: number): void {
   const { currentSet, recentHistory } = state;
-  if (currentSet.weightKg === nextWeightKg) return;
+  if (currentSet.weightKg === nextWeightKg) {
+    return;
+  }
 
   currentSet.weightKg = nextWeightKg;
   recentHistory.length = 0;
@@ -74,15 +76,21 @@ function applyLoadIntent(state: ScenarioState, intent: Intent): void {
 
   if (intent.kind === 'SetLoadTo') {
     const { valueKg } = intent;
-    if (valueKg < 0) return;
+    if (valueKg < 0) {
+      return;
+    }
     changeWeight(state, valueKg);
     return;
   }
 
-  if (intent.kind !== 'IncreaseLoad' && intent.kind !== 'DecreaseLoad') return;
+  if (intent.kind !== 'IncreaseLoad' && intent.kind !== 'DecreaseLoad') {
+    return;
+  }
 
   const { weightKg } = currentSet;
-  if (weightKg === null) return;
+  if (weightKg === null) {
+    return;
+  }
 
   const delta = intent.kind === 'IncreaseLoad' ? LOAD_STEP_KG : -LOAD_STEP_KG;
   changeWeight(state, Math.max(0, weightKg + delta));
@@ -115,12 +123,15 @@ export function applyIntent(
       completed: true,
       performedAt: new Date(),
     });
+
     return;
   }
 
   if (intent.kind === 'ReportRPE') {
     const lastSet = recentHistory.at(LAST_INDEX);
-    if (lastSet === undefined) return;
+    if (lastSet === undefined) {
+      return;
+    }
     const { rpe } = intent;
     lastSet.rpe = rpe;
     return;
@@ -146,14 +157,20 @@ export function applyDecision(
   state: ScenarioState,
   decision: PolicyDecision,
 ): void {
-  if (decision.kind !== 'weightAdjustment') return;
+  if (decision.kind !== 'weightAdjustment') {
+    return;
+  }
 
   const delta = decision.details?.weightDelta;
-  if (delta === undefined) return;
+  if (delta === undefined) {
+    return;
+  }
 
   const { currentSet } = state;
   const { weightKg } = currentSet;
-  if (weightKg === null) return;
+  if (weightKg === null) {
+    return;
+  }
 
   changeWeight(state, Math.max(0, weightKg + delta));
 }
@@ -181,6 +198,7 @@ function decideLifecycle(
         confidence: 1,
       };
     }
+
     return {
       kind: 'sessionEnd',
       reasoning:

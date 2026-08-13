@@ -25,6 +25,7 @@ export function formatEngineAction(
   }
   const { adjustment } = action;
   const sign = adjustment.deltaKg < 0 ? '-' : '+';
+
   return `${adjustment.exerciseId} 무게 ${sign}${Math.abs(
     adjustment.deltaKg,
   )}kg 조정 제안: ${adjustment.reason} (확신도 ${adjustment.confidence})`;
