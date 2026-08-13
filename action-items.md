@@ -6,10 +6,10 @@ CONTEXT.md 도메인 모델 대비 미구현 갭을 우선순위 순으로 정�
 ## 현재 상태 요약
 
 - **구현됨**: 도메인 타입 전체, LLM 3계층(Intent/Policy/Expression) 인터페이스 + OpenRouter/fake 구현,
-  RPE Deload 단일 규칙 엔진, CLI(simulate/chat), Bun.serve + SSE 서버, 인메모리 세션 스토어.
-  서버 경로의 지각(RPE·통증·무게)과 집행(결정 → 세계 상태), `bun run check` + GitHub Actions CI.
-- **핵심 갭**: 세션 상태 머신이 enum뿐이고 전이 로직이 없어 `sessionEnd`/`exerciseSwap` 결정이
-  발화로만 나가고 집행되지 않음. 대화 이력이 어떤 LLM 호출에도 들어가지 않아 멀티턴 불가.
+  디로드·증량 2규칙 체이닝 엔진, 세션 상태 머신, 턴 코어(지각 → 판정 → 집행 → 표현),
+  Bun.serve + SSE 서버, 인메모리 세션 스토어, `bun run check` + GitHub Actions CI.
+- **핵심 갭**: 대화 이력이 어떤 LLM 호출에도 들어가지 않아 멀티턴 불가(리뷰 1.3).
+  시스템 이벤트(휴식 타이머)를 브레인에 유입시킬 통로가 없어 순수 반응형(리뷰 1.4).
   운동 DB·매칭 엔진·프로그램 생성·영속성·진행 추적은 전부 미착수.
 
 ---
@@ -17,42 +17,43 @@ CONTEXT.md 도메인 모델 대비 미구현 갭을 우선순위 순으로 정�
 ## P0 — 코칭 루프를 실제로 동작하게
 
 ### 1. 세션 상태 머신 전이 로직
-`src/domain/session-state.ts`에 enum만 존재. "상태 전이 로직은 후속 이슈에서 구현" 주석으로 명시된 부채.
+전이 규칙과 턴 연결은 구현됨. 시간 기반 자동 전이만 남았다.
 
-- [ ] 전이 함수 구현: `(현재 상태, Intent | 자동 트리거) → 다음 상태 | InvalidTransitionError`
-- [ ] 상태별 의도 유효성 테이블 (CONTEXT "상태별 의도 유효성" — 예: `mainWorkout`에서만 `CompleteSet` 허용)
-- [ ] 자동 전이: 휴식 타이머 만료 → `mainWorkout`
-- [ ] `ServerBrain`이 세션 상태를 검사·갱신하도록 연결 (현재는 상태 무시)
+- [x] 전이 함수 구현: `(현재 상태, Intent | 자동 트리거) → 다음 상태 | null`.
+      허용되지 않는 전이는 오류가 아니라 대화 상황이므로 throw하지 않고 회원에게 안내한다.
+- [x] 상태별 의도 유효성 테이블 (CONTEXT "상태별 의도 유효성")
+- [ ] 자동 전이: 휴식 타이머 만료 → `mainWorkout`.
+      `RestTimerExpired` 트리거는 정의돼 있으나 이를 발생시킬 스케줄러가 없다.
+      리뷰 1.4(ambient agent)의 "시스템 이벤트가 브레인으로 유입될 통로"와 같은 작업.
+- [x] `ServerBrain`이 세션 상태를 검사·갱신하도록 연결
 
 ### 2. Intent 처리 폭 확장 (ServerBrain)
-`src/server/process.ts`가 지각(의도 → 세계 상태)과 집행(결정 → 세계 상태)을 담당한다.
-상태 머신에 의존하는 세션 생명주기 의도만 남았다.
+턴 코어(`src/session/turn.ts`)가 지각(의도 → 세계 상태)과 집행(결정 → 세계 상태)을 담당하고,
+`src/server/process.ts`는 저장소·SSE 연결만 맡는다.
 
 - [x] `ReportRPE` → 직전 세트 기록에 실제 RPE 반영 (하드코딩 제거)
 - [x] `SetLoadTo` / `IncreaseLoad` / `DecreaseLoad` → `currentSet` 무게 갱신
-- [ ] `StartSession` / `EndSession` / `PauseSession` / `ResumeSession` → 상태 머신 전이와 연결 (#1 선행)
+- [x] `StartSession` / `EndSession` / `PauseSession` / `ResumeSession` → 상태 머신 전이와 연결
 - [x] `ReportPain` → 부상 대응 3단계(필터링/경고/제안)의 최소 버전: 통증 강도 1~3 경고, 4~6 교체 제안, 7~10 중단 권고
-- [~] Intent 분류기(OpenRouter)가 도메인 Intent 22종 중 8종만 지원 → `reportPain` 추가로 9종.
-      위 세션 생명주기 의도를 처리할 때 함께 확장한다.
+- [~] Intent 분류기(OpenRouter)가 도메인 Intent 22종 중 8종만 지원 → 12종으로 확장
+      (`reportPain`/`pauseSession`/`resumeSession`/`completeExercise` 추가).
+      남은 10종은 소비할 처리 로직이 생길 때 함께 넓힌다.
 - [x] **Executor** — 결정을 표현보다 먼저 세계 상태에 집행. 무게가 바뀌면 최근 세트 윈도우를
       리셋해 같은 결정이 매 턴 반복되지 않게 한다. (리뷰 1.1)
-- [ ] `sessionEnd` / `exerciseSwap` 집행 — 현재는 발화로만 나가고 세계는 그대로다.
-      각각 상태 머신(#1)과 운동 DB(#4)가 전제.
-- [ ] **코어 추출** — `processUtterance`에서 `SessionStore` 결합을 분리해 엔트리 공용 코어로.
-      현재 `cli.ts runChat`과 `server/process.ts`가 같은 4단계(classify → pipeline → synthesize → express)를
-      각각 필사하고 있고, 이것이 `server → cli` 역방향 import의 원인. 코어가 생기면 엔트리는 I/O만 담당.
-- [ ] **CLI 정리** (코어 추출과 동시) — `src/cli.ts` 삭제 + `package.json`의 `bin`/`start`/`dev` 제거.
-      `chat`은 서버 `/utterance`의 상태 없는 복제본(`recentHistory: []` 고정 → 엔진이 구조적으로 항상 `null`).
-      `simulate`가 하던 시나리오 주입·엔진 판정 검증은 이미 `scenarios.spec.ts`/`pipeline.spec.ts`가 수행.
-      유일한 실손실인 `--llm`(실 LLM 육안 확인)은 #7 평가 하네스의 채점 러너로 복원한다.
-      `src/cli/*.ts`는 서버가 쓰는 공용 코드이므로 삭제가 아니라 중립 경로로 이동, `scenarios/*.json`은 존치.
+- [x] `sessionEnd` 집행 — 통증 등 비-생명주기 경로에서 나온 종료 결정도 상태를 전이시킨다.
+- [ ] `exerciseSwap` 집행 — 교체 후보를 낼 운동 DB(#4)가 전제라 아직 발화로만 나간다.
+- [x] **코어 추출** — `session/turn.ts`의 `processTurn`. 저장소·전송 계층을 모르므로 어떤
+      엔트리에서든 같은 흐름을 쓴다. `server → cli` 역방향 import가 해소됐다.
+- [x] **CLI 정리** — `src/cli.ts` 삭제, `src/cli/*` → `src/session/*` 이동,
+      `package.json`의 `bin` 제거 및 `start`/`dev`를 서버로 전환. `scenarios/*.json`은 존치.
 
 ### 3. 결정 엔진 규칙 체이닝
-`src/engine/decision-engine.ts`가 단일 규칙(RPE Deload)만 수용. "규칙 체이닝/우선순위는 후속 이슈로 미룬다" 명시된 부채.
+`Rule` 인터페이스로 일반화하고 디로드·증량 두 규칙을 우선순위 순으로 등록한다.
 
-- [ ] 규칙 인터페이스 일반화 + 복수 규칙 등록, 우선순위/단락(first-match) 정책 결정
-- [ ] 증량 규칙 추가: 목표 반복 성공 + 낮은 RPE 연속 → `deltaKg` 증가 (점진적 과부하의 나머지 절반)
-- [ ] `DecisionInput`의 미사용 필드(`program`, `currentSet`)를 실제 소비하는 규칙 도입
+- [x] 규칙 인터페이스 일반화 + 복수 규칙 등록, 우선순위/단락(first-match) 정책 결정
+- [x] 증량 규칙 추가: 목표 반복 성공 + 낮은 RPE 연속 → `deltaKg` 증가 (점진적 과부하의 나머지 절반)
+- [x] `DecisionInput`의 미사용 필드를 실제 소비하는 규칙 도입 — 증량 규칙이 `currentSet`을
+      목표 반복 기준으로 쓴다. `program`은 여전히 미사용(세션 간/프로그램 스코프 규칙에서 필요).
 
 ## P1 — 도메인 완성의 전제 데이터
 
