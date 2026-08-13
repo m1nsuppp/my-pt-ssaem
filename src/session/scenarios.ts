@@ -12,12 +12,25 @@ import type { SetRecord } from '../domain/set-record.ts';
 import type { PlannedSet } from '../domain/workout.ts';
 import type { PolicyContext } from '../llm/policy.ts';
 
-/** RPE 디로드 규칙 설정 */
+/**
+ * 자동조절 규칙 설정.
+ *
+ * 디로드는 시나리오가 반드시 명시하고, 증량은 생략하면 규칙 기본값을 쓴다 —
+ * 기존 시나리오 파일이 그대로 동작해야 한다.
+ */
 export interface RuleConfig {
   thresholdRpe: number;
   consecutiveSets: number;
   deltaKg: number;
   confidence: number;
+  /** 증량 판정 RPE 상한 */
+  progressionCeilingRpe?: number | undefined;
+  /** 증량 판정 연속 세트 수 */
+  progressionConsecutiveSets?: number | undefined;
+  /** 증량 폭 (kg) */
+  progressionDeltaKg?: number | undefined;
+  /** 증량 확신도 */
+  progressionConfidence?: number | undefined;
 }
 
 /** 로드된 시나리오 전체 상태 */
@@ -102,6 +115,10 @@ const ruleSchema = z.object({
   consecutiveSets: z.number(),
   deltaKg: z.number(),
   confidence: z.number(),
+  progressionCeilingRpe: z.number().optional(),
+  progressionConsecutiveSets: z.number().optional(),
+  progressionDeltaKg: z.number().optional(),
+  progressionConfidence: z.number().optional(),
 });
 
 const scenarioSchema = z.object({

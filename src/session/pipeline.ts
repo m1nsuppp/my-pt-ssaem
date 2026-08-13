@@ -10,6 +10,7 @@ import type { ProgressiveOverloadAction } from '../domain/progressive-overload.t
 import type { DecisionEngine } from '../engine/decision-engine.ts';
 import { createDecisionEngine } from '../engine/decision-engine.ts';
 import { createRpeDeloadRule } from '../engine/rules/rpe-deload.ts';
+import { createRpeProgressionRule } from '../engine/rules/rpe-progression.ts';
 import type { ExpressionLLM } from '../llm/expression.ts';
 import type { PolicyDecision, PolicyLLM } from '../llm/policy.ts';
 import { formatEngineAction } from './format.ts';
@@ -52,14 +53,31 @@ export interface RunOptions {
  * 4. 표현 LLM + 정책 결정이 있으면 페르소나 발화, 아니면 결정적 포매터 사용
  */
 function buildEngine(state: ScenarioState): DecisionEngine {
-  const rule = createRpeDeloadRule({
-    exerciseId: state.exerciseId,
-    thresholdRpe: state.rule.thresholdRpe,
-    consecutiveSets: state.rule.consecutiveSets,
-    deltaKg: state.rule.deltaKg,
-    confidence: state.rule.confidence,
-  });
-  return createDecisionEngine(rule);
+  const { rule } = state;
+
+  // 순서가 곧 우선순위 — 부하를 줄이는 판정을 먼저 검토한다.
+  return createDecisionEngine([
+    createRpeDeloadRule({
+      thresholdRpe: rule.thresholdRpe,
+      consecutiveSets: rule.consecutiveSets,
+      deltaKg: rule.deltaKg,
+      confidence: rule.confidence,
+    }),
+    createRpeProgressionRule({
+      ...(rule.progressionCeilingRpe === undefined
+        ? {}
+        : { ceilingRpe: rule.progressionCeilingRpe }),
+      ...(rule.progressionConsecutiveSets === undefined
+        ? {}
+        : { consecutiveSets: rule.progressionConsecutiveSets }),
+      ...(rule.progressionDeltaKg === undefined
+        ? {}
+        : { deltaKg: rule.progressionDeltaKg }),
+      ...(rule.progressionConfidence === undefined
+        ? {}
+        : { confidence: rule.progressionConfidence }),
+    }),
+  ]);
 }
 
 async function buildMessage(
