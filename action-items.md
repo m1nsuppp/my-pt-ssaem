@@ -7,8 +7,10 @@ CONTEXT.md 도메인 모델 대비 미구현 갭을 우선순위 순으로 정�
 
 - **구현됨**: 도메인 타입 전체, LLM 3계층(Intent/Policy/Expression) 인터페이스 + OpenRouter/fake 구현,
   RPE Deload 단일 규칙 엔진, CLI(simulate/chat), Bun.serve + SSE 서버, 인메모리 세션 스토어.
-- **핵심 갭**: 세션 상태 머신이 enum뿐이고 전이 로직이 없음. 서버는 `CompleteSet` 외 의도를 무시하고
-  RPE를 8로 하드코딩. 운동 DB·매칭 엔진·프로그램 생성·영속성·진행 추적은 전부 미착수.
+  서버 경로의 지각(RPE·통증·무게)과 집행(결정 → 세계 상태), `bun run check` + GitHub Actions CI.
+- **핵심 갭**: 세션 상태 머신이 enum뿐이고 전이 로직이 없어 `sessionEnd`/`exerciseSwap` 결정이
+  발화로만 나가고 집행되지 않음. 대화 이력이 어떤 LLM 호출에도 들어가지 않아 멀티턴 불가.
+  운동 DB·매칭 엔진·프로그램 생성·영속성·진행 추적은 전부 미착수.
 
 ---
 
@@ -23,13 +25,19 @@ CONTEXT.md 도메인 모델 대비 미구현 갭을 우선순위 순으로 정�
 - [ ] `ServerBrain`이 세션 상태를 검사·갱신하도록 연결 (현재는 상태 무시)
 
 ### 2. Intent 처리 폭 확장 (ServerBrain)
-`src/server/process.ts`가 `CompleteSet`만 처리하고 나머지 의도는 전부 무시. RPE는 8 하드코딩.
+`src/server/process.ts`가 지각(의도 → 세계 상태)과 집행(결정 → 세계 상태)을 담당한다.
+상태 머신에 의존하는 세션 생명주기 의도만 남았다.
 
-- [ ] `ReportRPE` → 직전 세트 기록에 실제 RPE 반영 (하드코딩 제거)
-- [ ] `SetLoadTo` / `IncreaseLoad` / `DecreaseLoad` → `currentSet` 무게 갱신
-- [ ] `StartSession` / `EndSession` / `PauseSession` / `ResumeSession` → 상태 머신 전이와 연결
-- [ ] `ReportPain` → 부상 대응 3단계(필터링/경고/제안)의 최소 버전: 통증 강도 1~3 경고, 4~6 교체 제안, 7~10 중단 권고
-- [ ] Intent 분류기(OpenRouter)가 도메인 Intent 22종 중 8종만 지원 → 위에서 처리하는 의도만큼 분류 범위 확장
+- [x] `ReportRPE` → 직전 세트 기록에 실제 RPE 반영 (하드코딩 제거)
+- [x] `SetLoadTo` / `IncreaseLoad` / `DecreaseLoad` → `currentSet` 무게 갱신
+- [ ] `StartSession` / `EndSession` / `PauseSession` / `ResumeSession` → 상태 머신 전이와 연결 (#1 선행)
+- [x] `ReportPain` → 부상 대응 3단계(필터링/경고/제안)의 최소 버전: 통증 강도 1~3 경고, 4~6 교체 제안, 7~10 중단 권고
+- [~] Intent 분류기(OpenRouter)가 도메인 Intent 22종 중 8종만 지원 → `reportPain` 추가로 9종.
+      위 세션 생명주기 의도를 처리할 때 함께 확장한다.
+- [x] **Executor** — 결정을 표현보다 먼저 세계 상태에 집행. 무게가 바뀌면 최근 세트 윈도우를
+      리셋해 같은 결정이 매 턴 반복되지 않게 한다. (리뷰 1.1)
+- [ ] `sessionEnd` / `exerciseSwap` 집행 — 현재는 발화로만 나가고 세계는 그대로다.
+      각각 상태 머신(#1)과 운동 DB(#4)가 전제.
 - [ ] **코어 추출** — `processUtterance`에서 `SessionStore` 결합을 분리해 엔트리 공용 코어로.
       현재 `cli.ts runChat`과 `server/process.ts`가 같은 4단계(classify → pipeline → synthesize → express)를
       각각 필사하고 있고, 이것이 `server → cli` 역방향 import의 원인. 코어가 생기면 엔트리는 I/O만 담당.
@@ -90,7 +98,7 @@ PolicyLLM이 simulate 경로에서만 쓰이고 chat/서버 경로는 `synthesiz
 
 ## 기타 (수시 처리)
 
-- [ ] `bun test` 스크립트가 package.json에 없음 (`check`에 테스트 미포함) → 추가
-- [ ] GitHub Actions CI 부재 (`.github`에 PR 템플릿뿐) → `bun run check` + `bun test` 워크플로
+- [x] `bun test` 스크립트가 package.json에 없음 (`check`에 테스트 미포함) → 추가
+- [x] GitHub Actions CI 부재 (`.github`에 PR 템플릿뿐) → `bun run check` + `bun test` 워크플로
 - [ ] CONTEXT.md 오타: "울동" → "운동" (3곳, 제약 모델 섹션)
 - [ ] 서버 CORS `ALLOWED_ORIGIN = '*'` + secret 미설정 시 무인증 — 공개 배포 전 재검토
