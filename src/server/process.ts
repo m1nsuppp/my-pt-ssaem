@@ -63,8 +63,13 @@ export function createServerBrain(
       text: string,
     ): Promise<ProcessedResult> {
       const record = store.session(sessionId);
-      const turn = await processTurn(record.state, sessionId, text, deps);
-      const { intent, engineAction, decision, message } = turn;
+      const turn = await processTurn(
+        { sessionId, state: record.state, context: record.context, text },
+        deps,
+      );
+      const { intent, engineAction, decision, message, context } = turn;
+
+      store.updateContext(sessionId, context);
 
       store.pushEvent(sessionId, { type: 'intent', intent });
       store.pushEvent(sessionId, {
@@ -72,6 +77,10 @@ export function createServerBrain(
         action: engineAction,
       });
       store.pushEvent(sessionId, { type: 'decision', decision });
+      store.pushEvent(sessionId, {
+        type: 'state',
+        state: context.currentState,
+      });
       for (const delta of chunkMessage(message)) {
         store.pushEvent(sessionId, { type: 'message', delta });
       }

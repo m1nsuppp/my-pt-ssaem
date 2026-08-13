@@ -7,6 +7,8 @@
 
 import type { Intent } from '../domain/intent.ts';
 import type { ProgressiveOverloadAction } from '../domain/progressive-overload.ts';
+import type { SessionStateContext } from '../domain/session-state.ts';
+import { SessionState } from '../domain/session-state.ts';
 import type { PolicyDecision } from '../llm/policy.ts';
 import type { ScenarioState } from '../session/scenarios.ts';
 
@@ -16,6 +18,7 @@ export type SessionEvent =
   | { type: 'intent'; intent: Intent }
   | { type: 'engine_action'; action: ProgressiveOverloadAction | null }
   | { type: 'decision'; decision: PolicyDecision }
+  | { type: 'state'; state: SessionState }
   | { type: 'message'; delta: string }
   | { type: 'done'; message: string; sessionId: string }
   | { type: 'session_end'; sessionId: string };
@@ -23,7 +26,24 @@ export type SessionEvent =
 export interface SessionRecord {
   id: string;
   state: ScenarioState;
+  /** 세션 진행 상태 — 턴 코어가 새 값을 반환하면 저장소가 교체한다. */
+  context: SessionStateContext;
   events: SessionEvent[];
+}
+
+/**
+ * 새 세션의 진행 컨텍스트.
+ *
+ * 데모 세션은 이미 운동 중인 지점에서 시작한다 — 컨디션 체크 플로우는 미구현이라
+ * `preCheckin`으로 두면 어떤 세트 의도도 받을 수 없다.
+ */
+function initialContext(): SessionStateContext {
+  return {
+    currentState: SessionState.MainWorkout,
+    elapsedSeconds: 0,
+    completedSets: 0,
+    totalSets: 0,
+  };
 }
 
 export interface SessionStore {
@@ -31,6 +51,8 @@ export interface SessionStore {
   createSession: (id?: string) => string;
   /** get-or-create — 미지의 id라도 상태를 기본값으로 새로 만들어 반환. */
   session: (id: string) => SessionRecord;
+  /** 턴 처리로 갱신된 세션 진행 컨텍스트를 반영한다. */
+  updateContext: (id: string, context: SessionStateContext) => void;
   /** 버퍼에 추가 후 활성 구독자에게 즉시 전달. */
   pushEvent: (id: string, event: SessionEvent) => void;
   /** 버퍼 전체를 먼저 재생한 뒤 새 이벤트를 실시간 전달. 해제 함수 반환. */
@@ -48,7 +70,12 @@ export function createInMemorySessionStore(
   function ensure(id: string): SessionRecord {
     let record = records.get(id);
     if (record === undefined) {
-      record = { id, state: structuredClone(initialState), events: [] };
+      record = {
+        id,
+        state: structuredClone(initialState),
+        context: initialContext(),
+        events: [],
+      };
       records.set(id, record);
     }
     return record;
@@ -62,6 +89,11 @@ export function createInMemorySessionStore(
     },
     session(id: string): SessionRecord {
       return ensure(id);
+    },
+    updateContext(id: string, context: SessionStateContext): void {
+      const record = records.get(id);
+      if (record === undefined) return;
+      record.context = context;
     },
     pushEvent(id: string, event: SessionEvent): void {
       const record = records.get(id);

@@ -214,6 +214,12 @@ function matchKeywordIntent(lower: string): Intent | null {
     return { kind: 'DecreaseLoad' };
   }
   if (containsAny(lower, ['종료', 'end'])) return { kind: 'EndSession' };
+  if (containsAny(lower, ['잠깐', '멈춰', '일시정지', 'pause'])) {
+    return { kind: 'PauseSession' };
+  }
+  if (containsAny(lower, ['재개', '다시 하자', 'resume'])) {
+    return { kind: 'ResumeSession' };
+  }
   return null;
 }
 

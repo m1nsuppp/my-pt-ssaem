@@ -82,7 +82,7 @@ const DECISION_SYSTEM_PROMPT = [
 
 const OPENROUTER_INTENT_SYSTEM_PROMPT = [
   '발화를 분류해 JSON으로 반환하라.',
-  'kind는 [startSession|completeSet|increaseLoad|decreaseLoad|setLoadTo|reportRPE|reportPain|endSession|askQuestion] 중 하나.',
+  'kind는 [startSession|completeSet|completeExercise|increaseLoad|decreaseLoad|setLoadTo|reportRPE|reportPain|pauseSession|resumeSession|endSession|askQuestion] 중 하나.',
   '',
   '통증을 호소하면 다른 의도보다 우선해 reportPain으로 분류하라.',
   'reportPain인 경우 areas(신체 부위 배열)와 level(1~10)을 포함하되,',
@@ -389,6 +389,9 @@ const intentKindSchema = z.discriminatedUnion('kind', [
     areas: z.array(z.string()),
     level: z.number(),
   }),
+  z.object({ kind: z.literal('completeExercise') }),
+  z.object({ kind: z.literal('pauseSession') }),
+  z.object({ kind: z.literal('resumeSession') }),
   z.object({ kind: z.literal('endSession') }),
   z.object({ kind: z.literal('askQuestion') }),
 ]);
@@ -419,6 +422,12 @@ function parseIntent(text: string, utterance: NormalizedUtterance): Intent {
           areas: parsed.data.areas,
           level: parsed.data.level,
         };
+      case 'completeExercise':
+        return { kind: 'CompleteExercise' };
+      case 'pauseSession':
+        return { kind: 'PauseSession' };
+      case 'resumeSession':
+        return { kind: 'ResumeSession' };
       case 'endSession':
         return { kind: 'EndSession' };
       case 'askQuestion':

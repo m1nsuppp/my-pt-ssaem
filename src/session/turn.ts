@@ -9,6 +9,8 @@
 import type { Intent } from '../domain/intent.ts';
 import { normalizeUtterance } from '../domain/intent.ts';
 import type { ProgressiveOverloadAction } from '../domain/progressive-overload.ts';
+import type { SessionStateContext } from '../domain/session-state.ts';
+import { applyTransition, SessionState } from '../domain/session-state.ts';
 import type { ExpressionLLM } from '../llm/expression.ts';
 import type { IntentClassifier } from '../llm/intent.ts';
 import type { PolicyDecision } from '../llm/policy.ts';
@@ -21,12 +23,24 @@ export interface TurnDeps {
   expression: ExpressionLLM;
 }
 
-/** 턴 처리 결과 — 상태는 `state`에 이미 반영되어 있다. */
+/** 턴 처리 입력 — 세션 하나의 현재 모습 */
+export interface TurnInput {
+  sessionId: string;
+  /** 세계 상태 (세트 기록, 계획 무게, 컨디션). 이 함수가 직접 갱신한다. */
+  state: ScenarioState;
+  /** 세션 진행 컨텍스트. 갱신본은 결과로 돌려준다. */
+  context: SessionStateContext;
+  /** 회원의 원문 발화 */
+  text: string;
+}
+
+/** 턴 처리 결과 — 세계 상태는 `state`에 반영되어 있고, 진행 상태는 `context`로 돌려준다. */
 export interface TurnResult {
   intent: Intent;
   engineAction: ProgressiveOverloadAction | null;
   decision: PolicyDecision;
   message: string;
+  context: SessionStateContext;
 }
 
 /** Array.at()으로 마지막 요소를 가리키는 인덱스 */
@@ -145,32 +159,109 @@ export function applyDecision(
 }
 
 /**
- * 발화 한 건을 처리해 세계 상태를 갱신하고 결과를 반환한다.
+ * 세션 생명주기 의도에 대한 결정을 만든다.
  *
- * @param state - 세션의 현재 세계 상태. 이 함수가 직접 갱신한다.
- * @param sessionId - 세트 기록에 남길 세션 식별자
- * @param text - 회원의 원문 발화
- * @param deps - 의도 분류기와 표현 LLM
+ * 전이가 일어나지 않았다면 지금 상태에서 받을 수 없는 요청이므로, 결정을 내리는 대신
+ * 그 사실을 회원에게 알린다 — 잘못된 시점의 발화는 오류가 아니라 대화 상황이다.
+ *
+ * @returns 생명주기 의도가 아니면 `null`
+ */
+function decideLifecycle(
+  intent: Intent,
+  before: SessionState,
+  after: SessionState,
+): PolicyDecision | null {
+  const rejected = before === after;
+
+  if (intent.kind === 'EndSession') {
+    if (rejected) {
+      return {
+        kind: 'continue',
+        reasoning: '지금은 세션을 종료할 수 없는 상태다',
+        confidence: 1,
+      };
+    }
+    return {
+      kind: 'sessionEnd',
+      reasoning:
+        after === SessionState.Completed
+          ? '세션을 완료한다'
+          : '마무리 단계로 넘어간다',
+      confidence: 1,
+    };
+  }
+
+  if (intent.kind === 'PauseSession') {
+    return rejected
+      ? {
+          kind: 'continue',
+          reasoning: '지금은 일시 중지할 수 없는 상태다',
+          confidence: 1,
+        }
+      : { kind: 'pause', reasoning: '세션을 일시 중지한다', confidence: 1 };
+  }
+
+  if (intent.kind === 'ResumeSession') {
+    return {
+      kind: 'continue',
+      reasoning: rejected
+        ? '일시 중지 상태가 아니라 재개할 것이 없다'
+        : `${after}에서 세션을 재개한다`,
+      confidence: 1,
+    };
+  }
+
+  if (intent.kind === 'StartSession') {
+    return {
+      kind: 'continue',
+      reasoning: rejected
+        ? '이미 진행 중인 세션이다'
+        : '세션을 시작하고 워밍업으로 넘어간다',
+      confidence: 1,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * 발화 한 건을 처리해 세계 상태와 세션 진행 상태를 갱신하고 결과를 반환한다.
+ *
+ * 세션 상태 전이는 의도로 한 번, 결정이 세션 종료면 한 번 더 적용된다 —
+ * 통증 같은 비-생명주기 의도에서 나온 종료 결정도 실제로 집행되어야 한다.
  */
 export async function processTurn(
-  state: ScenarioState,
-  sessionId: string,
-  text: string,
+  input: TurnInput,
   deps: TurnDeps,
 ): Promise<TurnResult> {
+  const { sessionId, state, context, text } = input;
   const intent = await deps.intent.classify(normalizeUtterance(text));
 
   applyIntent(state, sessionId, intent);
 
+  const afterIntent = applyTransition(context, intent.kind);
   const result = await runDecisionPipeline(state, {});
-  const decision = synthesizeDecision(intent, result.engineAction);
+  const decision =
+    decideLifecycle(intent, context.currentState, afterIntent.currentState) ??
+    synthesizeDecision(intent, result.engineAction);
 
   applyDecision(state, decision);
+
+  const nextContext =
+    decision.kind === 'sessionEnd' && intent.kind !== 'EndSession'
+      ? applyTransition(afterIntent, 'EndSession')
+      : afterIntent;
 
   const message = await deps.expression.express({
     decision,
     persona: state.persona,
   });
 
-  return { intent, engineAction: result.engineAction, decision, message };
+  return {
+    intent,
+    engineAction: result.engineAction,
+    decision,
+    message,
+    context: nextContext,
+  };
 }

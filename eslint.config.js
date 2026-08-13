@@ -15,9 +15,11 @@ export default [
   },
   {
     // 스펙은 시나리오 수치를 리터럴로 검증하는 게 본질 — 테스트 코드에서는 off.
+    // 턴 시퀀스는 이전 결과가 다음 입력이라 직렬 실행이 본질이므로 await-in-loop도 off.
     files: ['src/**/*.spec.ts'],
     rules: {
       '@typescript-eslint/no-magic-numbers': 'off',
+      'no-await-in-loop': 'off',
     },
   },
 ];
