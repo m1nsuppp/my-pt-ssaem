@@ -87,6 +87,47 @@ describe('createServerBrain.processUtterance', () => {
     expect(result.decision.details?.weightDelta).toBe(-5);
   });
 
+  test('디로드 판정은 계획 무게에 집행된다 (말만 하지 않음)', async () => {
+    const { brain, store } = makeBrain();
+
+    await brain.processUtterance('123', '1세트 끝났어');
+    await brain.processUtterance('123', 'rpe 9');
+    await brain.processUtterance('123', '2세트 끝났어');
+    await brain.processUtterance('123', 'rpe 9');
+    await brain.processUtterance('123', '3세트 끝났어');
+    await brain.processUtterance('123', 'rpe 9');
+
+    // DEFAULT_CHAT_STATE의 100kg에서 규칙 deltaKg(-5) 적용
+    expect(store.session('123').state.currentSet.weightKg).toBe(95);
+  });
+
+  test('집행된 디로드는 다음 턴에 다시 나오지 않음', async () => {
+    const { brain } = makeBrain();
+
+    await brain.processUtterance('123', '1세트 끝났어');
+    await brain.processUtterance('123', 'rpe 9');
+    await brain.processUtterance('123', '2세트 끝났어');
+    await brain.processUtterance('123', 'rpe 9');
+    await brain.processUtterance('123', '3세트 끝났어');
+    await brain.processUtterance('123', 'rpe 9');
+
+    const next = await brain.processUtterance('123', '오늘 컨디션 좋아');
+    expect(next.engineAction).toBeNull();
+    expect(next.decision.kind).toBe('continue');
+  });
+
+  test('사용자가 무게를 바꾸면 이전 무게의 세트 이력은 판정에서 제외됨', async () => {
+    const { brain, store } = makeBrain();
+
+    await brain.processUtterance('123', '1세트 끝났어');
+    await brain.processUtterance('123', 'rpe 9');
+    await brain.processUtterance('123', '2세트 끝났어');
+    await brain.processUtterance('123', 'rpe 9');
+    await brain.processUtterance('123', '무게 80');
+
+    expect(store.session('123').state.recentHistory).toHaveLength(0);
+  });
+
   test('RPE 8 세트를 3회 보고 → 임계 미달로 조정 없음', async () => {
     const { brain } = makeBrain();
 

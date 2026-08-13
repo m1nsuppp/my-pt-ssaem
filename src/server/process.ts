@@ -109,6 +109,21 @@ function applyIntent(record: SessionRecord, intent: Intent): void {
 }
 
 /**
+ * 계획 세트의 무게를 바꾸고, 실제로 달라졌으면 최근 세트 윈도우를 리셋한다.
+ *
+ * 이전 무게에서 쌓인 RPE는 새 무게의 판정 근거가 될 수 없다. 리셋하지 않으면
+ * 같은 이력이 매 턴 같은 조정을 다시 만들어낸다.
+ */
+function changeWeight(record: SessionRecord, nextWeightKg: number): void {
+  const { state } = record;
+  const { currentSet } = state;
+  if (currentSet.weightKg === nextWeightKg) return;
+
+  currentSet.weightKg = nextWeightKg;
+  state.recentHistory.length = 0;
+}
+
+/**
  * 무게 조정 의도를 계획 세트에 반영한다.
  *
  * 맨몸 운동(`weightKg === null`)은 조정 대상이 아니고, 음수 무게는 만들지 않는다.
@@ -121,7 +136,7 @@ function applyLoadIntent(record: SessionRecord, intent: Intent): void {
   if (intent.kind === 'SetLoadTo') {
     const { valueKg } = intent;
     if (valueKg < 0) return;
-    currentSet.weightKg = valueKg;
+    changeWeight(record, valueKg);
     return;
   }
 
@@ -131,7 +146,27 @@ function applyLoadIntent(record: SessionRecord, intent: Intent): void {
   if (weightKg === null) return;
 
   const delta = intent.kind === 'IncreaseLoad' ? LOAD_STEP_KG : -LOAD_STEP_KG;
-  currentSet.weightKg = Math.max(0, weightKg + delta);
+  changeWeight(record, Math.max(0, weightKg + delta));
+}
+
+/**
+ * 결정을 세계 상태에 집행한다 — 발화보다 먼저 세계가 바뀐다.
+ *
+ * `weightAdjustment`만 집행 대상이다. `sessionEnd`/`exerciseSwap`은 세션 상태 머신과
+ * 운동 DB가 전제라 아직 집행하지 못하고 발화로만 전달된다.
+ */
+function applyDecision(record: SessionRecord, decision: PolicyDecision): void {
+  if (decision.kind !== 'weightAdjustment') return;
+
+  const delta = decision.details?.weightDelta;
+  if (delta === undefined) return;
+
+  const { state } = record;
+  const { currentSet } = state;
+  const { weightKg } = currentSet;
+  if (weightKg === null) return;
+
+  changeWeight(record, Math.max(0, weightKg + delta));
 }
 
 export function createServerBrain(
@@ -150,6 +185,9 @@ export function createServerBrain(
 
       const result = await runDecisionPipeline(record.state, {});
       const decision = synthesizeDecision(intent, result.engineAction);
+
+      applyDecision(record, decision);
+
       const message = await deps.expression.express({
         decision,
         persona: record.state.persona,
