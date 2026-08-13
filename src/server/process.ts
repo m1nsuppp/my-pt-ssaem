@@ -1,23 +1,18 @@
 /**
- * 발화 처리 브레인 — 세션 단위로 의도 분류 → 결정 → 표현 흐름을 재현한다.
+ * 서버 브레인 — 턴 코어를 세션 저장소·SSE 이벤트와 연결한다.
  *
- * CLI `runChat`의 순서(classify → runDecisionPipeline → synthesizeDecision → express)를
- * 세션 상태 저장소와 결합해 HTTP 요청마다 재실행한다.
+ * 처리 흐름 자체는 `session/turn.ts`가 갖고 있고, 여기서는 세션을 찾아 코어에 넘기고
+ * 결과를 이벤트로 흘리는 일만 한다.
  */
 
-import { runDecisionPipeline, synthesizeDecision } from '../cli/pipeline.ts';
 import type { Intent } from '../domain/intent.ts';
-import { normalizeUtterance } from '../domain/intent.ts';
 import type { ProgressiveOverloadAction } from '../domain/progressive-overload.ts';
-import type { ExpressionLLM } from '../llm/expression.ts';
-import type { IntentClassifier } from '../llm/intent.ts';
 import type { PolicyDecision } from '../llm/policy.ts';
-import type { SessionRecord, SessionStore } from './session-store.ts';
+import type { TurnDeps } from '../session/turn.ts';
+import { processTurn } from '../session/turn.ts';
+import type { SessionStore } from './session-store.ts';
 
-export interface ProcessDeps {
-  intent: IntentClassifier;
-  expression: ExpressionLLM;
-}
+export type ProcessDeps = TurnDeps;
 
 export interface ProcessedResult {
   sessionId: string;
@@ -36,12 +31,6 @@ export interface ServerBrain {
 
 /** 청크당 최대 글자 수 */
 const MAX_CHUNK_LENGTH = 30;
-
-/** Array.at()으로 마지막 요소를 가리키는 인덱스 */
-const LAST_INDEX = -1;
-
-/** 조정 폭을 지정하지 않은 증감 요청에 적용할 기본 스텝(kg) */
-const LOAD_STEP_KG = 5;
 
 /**
  * 표현 결과를 단어 기준 최대 30자씩 끊어 청크 배열로 반환한다.
@@ -64,111 +53,6 @@ export function chunkMessage(message: string): string[] {
   return chunks;
 }
 
-/**
- * 의도를 세션의 세계 상태에 반영한다.
- *
- * `CompleteSet`은 RPE를 모르는 채로 기록한다 — 회원이 보고하기 전까지 `undefined`.
- * `ReportRPE`는 직전 세트에 실제 값을 채운다. 채울 세트가 없으면(세트 완료 전 보고)
- * 기록할 곳이 없으므로 상태를 바꾸지 않는다.
- * `ReportPain`은 컨디션에 부위·강도를 남긴다 — 이후 정책 판단의 입력이 된다.
- */
-function applyIntent(record: SessionRecord, intent: Intent): void {
-  const { state } = record;
-
-  if (intent.kind === 'CompleteSet') {
-    state.recentHistory.push({
-      id: crypto.randomUUID(),
-      sessionId: record.id,
-      exerciseId: state.exerciseId,
-      setNumber: state.recentHistory.length + 1,
-      plannedReps: state.currentSet.reps,
-      // 실제 수행 반복은 CompleteSet에 파라미터가 없어 계획치로 둔다.
-      actualReps: state.currentSet.reps,
-      completed: true,
-      performedAt: new Date(),
-    });
-    return;
-  }
-
-  if (intent.kind === 'ReportRPE') {
-    const lastSet = state.recentHistory.at(LAST_INDEX);
-    if (lastSet === undefined) return;
-    const { rpe } = intent;
-    lastSet.rpe = rpe;
-    return;
-  }
-
-  if (intent.kind === 'ReportPain') {
-    const { areas, level } = intent;
-    state.policy.condition.painAreas = areas;
-    state.policy.condition.painLevel = level;
-    return;
-  }
-
-  applyLoadIntent(record, intent);
-}
-
-/**
- * 계획 세트의 무게를 바꾸고, 실제로 달라졌으면 최근 세트 윈도우를 리셋한다.
- *
- * 이전 무게에서 쌓인 RPE는 새 무게의 판정 근거가 될 수 없다. 리셋하지 않으면
- * 같은 이력이 매 턴 같은 조정을 다시 만들어낸다.
- */
-function changeWeight(record: SessionRecord, nextWeightKg: number): void {
-  const { state } = record;
-  const { currentSet } = state;
-  if (currentSet.weightKg === nextWeightKg) return;
-
-  currentSet.weightKg = nextWeightKg;
-  state.recentHistory.length = 0;
-}
-
-/**
- * 무게 조정 의도를 계획 세트에 반영한다.
- *
- * 맨몸 운동(`weightKg === null`)은 조정 대상이 아니고, 음수 무게는 만들지 않는다.
- * `IncreaseLoad`/`DecreaseLoad`는 조정 폭이 없는 의도라 기본 스텝을 적용한다.
- */
-function applyLoadIntent(record: SessionRecord, intent: Intent): void {
-  const { state } = record;
-  const { currentSet } = state;
-
-  if (intent.kind === 'SetLoadTo') {
-    const { valueKg } = intent;
-    if (valueKg < 0) return;
-    changeWeight(record, valueKg);
-    return;
-  }
-
-  if (intent.kind !== 'IncreaseLoad' && intent.kind !== 'DecreaseLoad') return;
-
-  const { weightKg } = currentSet;
-  if (weightKg === null) return;
-
-  const delta = intent.kind === 'IncreaseLoad' ? LOAD_STEP_KG : -LOAD_STEP_KG;
-  changeWeight(record, Math.max(0, weightKg + delta));
-}
-
-/**
- * 결정을 세계 상태에 집행한다 — 발화보다 먼저 세계가 바뀐다.
- *
- * `weightAdjustment`만 집행 대상이다. `sessionEnd`/`exerciseSwap`은 세션 상태 머신과
- * 운동 DB가 전제라 아직 집행하지 못하고 발화로만 전달된다.
- */
-function applyDecision(record: SessionRecord, decision: PolicyDecision): void {
-  if (decision.kind !== 'weightAdjustment') return;
-
-  const delta = decision.details?.weightDelta;
-  if (delta === undefined) return;
-
-  const { state } = record;
-  const { currentSet } = state;
-  const { weightKg } = currentSet;
-  if (weightKg === null) return;
-
-  changeWeight(record, Math.max(0, weightKg + delta));
-}
-
 export function createServerBrain(
   deps: ProcessDeps,
   store: SessionStore,
@@ -179,24 +63,13 @@ export function createServerBrain(
       text: string,
     ): Promise<ProcessedResult> {
       const record = store.session(sessionId);
-      const intent = await deps.intent.classify(normalizeUtterance(text));
-
-      applyIntent(record, intent);
-
-      const result = await runDecisionPipeline(record.state, {});
-      const decision = synthesizeDecision(intent, result.engineAction);
-
-      applyDecision(record, decision);
-
-      const message = await deps.expression.express({
-        decision,
-        persona: record.state.persona,
-      });
+      const turn = await processTurn(record.state, sessionId, text, deps);
+      const { intent, engineAction, decision, message } = turn;
 
       store.pushEvent(sessionId, { type: 'intent', intent });
       store.pushEvent(sessionId, {
         type: 'engine_action',
-        action: result.engineAction,
+        action: engineAction,
       });
       store.pushEvent(sessionId, { type: 'decision', decision });
       for (const delta of chunkMessage(message)) {
@@ -204,13 +77,7 @@ export function createServerBrain(
       }
       store.pushEvent(sessionId, { type: 'done', message, sessionId });
 
-      return {
-        sessionId,
-        intent,
-        engineAction: result.engineAction,
-        decision,
-        message,
-      };
+      return { sessionId, intent, engineAction, decision, message };
     },
   };
 }

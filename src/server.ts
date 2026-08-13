@@ -5,7 +5,6 @@
  * (의도 분류 → 결정 → 표현)을 재사용한다. 결과는 SSE `data:` 이벤트로 chunk 단위 흘린다.
  */
 import { z } from 'zod';
-import { DEFAULT_CHAT_STATE } from './cli/scenarios.ts';
 import {
   createFakeExpressionLLM,
   createFakeIntentClassifier,
@@ -14,6 +13,7 @@ import { createOpenRouterLLMs } from './llm/openrouter/index.ts';
 import type { ServerBrain } from './server/process.ts';
 import { createServerBrain } from './server/process.ts';
 import { createInMemorySessionStore } from './server/session-store.ts';
+import { DEFAULT_CHAT_STATE } from './session/scenarios.ts';
 
 const DEFAULT_MODEL = 'deepseek/deepseek-v4-flash-0731';
 const DEFAULT_PORT = 3000;

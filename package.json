@@ -1,12 +1,9 @@
 {
   "name": "my-pt-ssaem",
   "type": "module",
-  "bin": {
-    "my-pt-ssaem": "src/cli.ts"
-  },
   "scripts": {
-    "start": "bun run src/cli.ts",
-    "dev": "bun --watch src/cli.ts",
+    "start": "bun run src/server.ts",
+    "dev": "bun --watch src/server.ts",
     "serve": "bun run src/server.ts",
     "build": "tsc --noEmit",
     "lint": "eslint .",

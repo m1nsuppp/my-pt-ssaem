@@ -4,10 +4,11 @@
  * 세션은 프로세스 수명 동안 유지된다. 클라이언트가 임의 id로 lazy 생성할 수 있고,
  * 발화 처리 중 발생한 이벤트를 버퍼에 쌓고 활성 구독자에게 즉시 전달한다.
  */
-import type { ScenarioState } from '../cli/scenarios.ts';
+
 import type { Intent } from '../domain/intent.ts';
 import type { ProgressiveOverloadAction } from '../domain/progressive-overload.ts';
 import type { PolicyDecision } from '../llm/policy.ts';
+import type { ScenarioState } from '../session/scenarios.ts';
 
 /** SSE 스트림의 페이로드이자 저장소 버퍼의 항목. */
 export type SessionEvent =

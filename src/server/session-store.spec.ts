@@ -2,7 +2,7 @@
  * 세션 저장소 스펙 — get-or-create, 이벤트 버퍼/구독/재생/해제의 공개 인터페이스 검증.
  */
 import { describe, expect, test } from 'bun:test';
-import { DEFAULT_CHAT_STATE } from '../cli/scenarios.ts';
+import { DEFAULT_CHAT_STATE } from '../session/scenarios.ts';
 import type { SessionEvent, SessionStore } from './session-store.ts';
 import { createInMemorySessionStore } from './session-store.ts';
 

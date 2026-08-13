@@ -2,11 +2,11 @@
  * 서버 브레인 스펙 — 발화 → 의도/결정/표현 + SSE 이벤트 방출의 공개 인터페이스 검증.
  */
 import { describe, expect, test } from 'bun:test';
-import { DEFAULT_CHAT_STATE } from '../cli/scenarios.ts';
 import {
   createFakeExpressionLLM,
   createFakeIntentClassifier,
 } from '../llm/fake.ts';
+import { DEFAULT_CHAT_STATE } from '../session/scenarios.ts';
 import type { ServerBrain } from './process.ts';
 import { chunkMessage, createServerBrain } from './process.ts';
 import type { SessionEvent, SessionStore } from './session-store.ts';
