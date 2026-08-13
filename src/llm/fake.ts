@@ -186,6 +186,17 @@ export function createFakeExpressionLLM(
  */
 const WEIGHT_PATTERN = /무게\s*(?<weight>\d+)\s*(?:kg)?/iv;
 const RPE_PATTERN = /rpe\s*(?<rpe>\d+)/iv;
+const PAIN_PATTERN = /(?:통증|아파|아픔|아픈)/iv;
+const PAIN_LEVEL_PATTERN = /(?<level>\d+)/v;
+const BODY_PARTS = [
+  '무릎',
+  '어깨',
+  '허리',
+  '손목',
+  '팔꿈치',
+  '발목',
+  '목',
+] as const;
 
 function containsAny(lower: string, keywords: readonly string[]): boolean {
   return keywords.some((keyword) => lower.includes(keyword));
@@ -222,8 +233,26 @@ function matchNumberIntent(lower: string): Intent | null {
   return null;
 }
 
+/**
+ * 통증 보고를 매칭한다. 강도를 언급하지 않으면 `level: 0`(미보고)으로 둔다 —
+ * 값을 지어내지 않고, 되묻기는 결정 계층의 몫이다.
+ */
+function matchPainIntent(lower: string): Intent | null {
+  if (!PAIN_PATTERN.test(lower)) return null;
+
+  const levelMatch = PAIN_LEVEL_PATTERN.exec(lower);
+  return {
+    kind: 'ReportPain',
+    areas: BODY_PARTS.filter((part) => lower.includes(part)),
+    level: Number(levelMatch?.groups?.level ?? 0),
+  };
+}
+
 function matchIntent(utterance: NormalizedUtterance): Intent {
   const lower = utterance.text.toLowerCase();
+  // 통증은 안전 의도라 다른 키워드보다 먼저 본다 ("어깨 아파서 못 했어" 같은 복합 발화).
+  const painIntent = matchPainIntent(lower);
+  if (painIntent !== null) return painIntent;
   const keywordIntent = matchKeywordIntent(lower);
   if (keywordIntent !== null) return keywordIntent;
   const numberIntent = matchNumberIntent(lower);

@@ -134,3 +134,58 @@ describe('synthesizeDecision', () => {
     expect(decision.details?.weightDelta).toBe(-5);
   });
 });
+
+describe('synthesizeDecision — 통증 3단계 대응', () => {
+  test('강도 7 이상 → 세션 중단', () => {
+    const decision = synthesizeDecision(
+      { kind: 'ReportPain', areas: ['무릎'], level: 8 },
+      null,
+    );
+    expect(decision.kind).toBe('sessionEnd');
+    expect(decision.reasoning).toContain('무릎');
+  });
+
+  test('강도 4~6 → 운동 교체 제안', () => {
+    const decision = synthesizeDecision(
+      { kind: 'ReportPain', areas: ['어깨'], level: 5 },
+      null,
+    );
+    expect(decision.kind).toBe('exerciseSwap');
+  });
+
+  test('강도 1~3 → 경고 후 진행', () => {
+    const decision = synthesizeDecision(
+      { kind: 'ReportPain', areas: ['허리'], level: 2 },
+      null,
+    );
+    expect(decision.kind).toBe('continue');
+    expect(decision.reasoning).toContain('경고');
+  });
+
+  test('강도 미보고(0) → 되묻기', () => {
+    const decision = synthesizeDecision(
+      { kind: 'ReportPain', areas: ['무릎'], level: 0 },
+      null,
+    );
+    expect(decision.kind).toBe('continue');
+    expect(decision.reasoning).toContain('되물어');
+  });
+
+  test('통증은 엔진의 무게 조정보다 우선한다', () => {
+    const action = {
+      scope: 'inSession' as const,
+      type: 'weightAdjustment' as const,
+      adjustment: {
+        exerciseId: 'squat',
+        deltaKg: -5,
+        reason: 'RPE >= 9 for 3 consecutive sets',
+        confidence: 0.9,
+      },
+    };
+    const decision = synthesizeDecision(
+      { kind: 'ReportPain', areas: ['무릎'], level: 9 },
+      action,
+    );
+    expect(decision.kind).toBe('sessionEnd');
+  });
+});

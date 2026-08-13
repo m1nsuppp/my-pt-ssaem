@@ -82,12 +82,18 @@ const DECISION_SYSTEM_PROMPT = [
 
 const OPENROUTER_INTENT_SYSTEM_PROMPT = [
   '발화를 분류해 JSON으로 반환하라.',
-  'kind는 [startSession|completeSet|increaseLoad|decreaseLoad|setLoadTo|reportRPE|endSession|askQuestion] 중 하나.',
+  'kind는 [startSession|completeSet|increaseLoad|decreaseLoad|setLoadTo|reportRPE|reportPain|endSession|askQuestion] 중 하나.',
+  '',
+  '통증을 호소하면 다른 의도보다 우선해 reportPain으로 분류하라.',
+  'reportPain인 경우 areas(신체 부위 배열)와 level(1~10)을 포함하되,',
+  '강도를 말하지 않았으면 level을 0으로 두라 — 추측한 값을 넣지 마라.',
   '',
   'setLoadTo인 경우 valueKg(kg)을, reportRPE인 경우 rpe(1~10)를 포함하라.',
   'JSON 형식:',
   '{ "kind": "setLoadTo", "valueKg": 100 }',
   '{ "kind": "reportRPE", "rpe": 8 }',
+  '{ "kind": "reportPain", "areas": ["무릎"], "level": 7 }',
+  '{ "kind": "reportPain", "areas": ["어깨"], "level": 0 }',
 ].join('\n');
 
 const CONTINUE_DECISION: PolicyDecision = {
@@ -378,6 +384,11 @@ const intentKindSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('decreaseLoad') }),
   z.object({ kind: z.literal('setLoadTo'), valueKg: z.number() }),
   z.object({ kind: z.literal('reportRPE'), rpe: z.number() }),
+  z.object({
+    kind: z.literal('reportPain'),
+    areas: z.array(z.string()),
+    level: z.number(),
+  }),
   z.object({ kind: z.literal('endSession') }),
   z.object({ kind: z.literal('askQuestion') }),
 ]);
@@ -402,6 +413,12 @@ function parseIntent(text: string, utterance: NormalizedUtterance): Intent {
         return { kind: 'SetLoadTo', valueKg: parsed.data.valueKg };
       case 'reportRPE':
         return { kind: 'ReportRPE', rpe: parsed.data.rpe };
+      case 'reportPain':
+        return {
+          kind: 'ReportPain',
+          areas: parsed.data.areas,
+          level: parsed.data.level,
+        };
       case 'endSession':
         return { kind: 'EndSession' };
       case 'askQuestion':

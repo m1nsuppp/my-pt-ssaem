@@ -101,6 +101,34 @@ describe('createServerBrain.processUtterance', () => {
     expect(result.decision.kind).toBe('continue');
   });
 
+  test('강한 통증 발화 → 세션 중단 결정 (이전에는 continue로 흘렸음)', async () => {
+    const { brain } = makeBrain();
+    const result = await brain.processUtterance('123', '무릎이 8 정도로 아파');
+
+    expect(result.intent.kind).toBe('ReportPain');
+    expect(result.decision.kind).toBe('sessionEnd');
+  });
+
+  test('통증 보고가 컨디션에 기록됨 (이후 정책 판단의 입력)', async () => {
+    const { brain, store } = makeBrain();
+    await brain.processUtterance('123', '무릎이 8 정도로 아파');
+
+    const { state } = store.session('123');
+    expect(state.policy.condition.painAreas).toEqual(['무릎']);
+    expect(state.policy.condition.painLevel).toBe(8);
+  });
+
+  test('통증 발화는 세트 완료 키워드보다 우선 분류됨', async () => {
+    const { brain, store } = makeBrain();
+    const result = await brain.processUtterance(
+      '123',
+      '어깨가 아파서 세트 못 했어',
+    );
+
+    expect(result.intent.kind).toBe('ReportPain');
+    expect(store.session('123').state.recentHistory).toHaveLength(0);
+  });
+
   test('message delta 이벤트 합침 == done.message (chunk 단위 SSE 전송 계약)', async () => {
     const { brain, store } = makeBrain();
     const deltas: string[] = [];

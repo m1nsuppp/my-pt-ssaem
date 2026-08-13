@@ -122,16 +122,68 @@ export async function runDecisionPipeline(
   };
 }
 
+/** 통증 강도 미보고 — 분류기가 강도를 확인하지 못한 경우. */
+const PAIN_LEVEL_UNREPORTED = 0;
+/** 통증 강도 구간 — 이 값 이상이면 세션 중단을 권고한다. */
+const PAIN_LEVEL_STOP = 7;
+/** 통증 강도 구간 — 이 값 이상이면 운동 교체를 제안한다. */
+const PAIN_LEVEL_SWAP = 4;
+
+/**
+ * 통증 보고에 대한 3단계 대응을 결정한다.
+ *
+ * 강도 7~10 → 세션 중단 권고, 4~6 → 운동 교체 제안, 1~3 → 경고 후 진행.
+ * 강도를 모르면 되묻는다 — 값을 지어내 대응 수준을 정하지 않는다.
+ * 신체 부하를 지시하는 결정이므로 LLM 추론이 아니라 고정 규칙으로 산출한다.
+ */
+function decidePainResponse(areas: string[], level: number): PolicyDecision {
+  const where = areas.length === 0 ? '통증' : `${areas.join(', ')} 통증`;
+
+  if (level <= PAIN_LEVEL_UNREPORTED) {
+    return {
+      kind: 'continue',
+      reasoning: `${where} 보고, 강도 미확인 — 강도를 되물어 대응 수준을 정한다`,
+      confidence: 1,
+    };
+  }
+
+  if (level >= PAIN_LEVEL_STOP) {
+    return {
+      kind: 'sessionEnd',
+      reasoning: `${where} 강도 ${level} — 부상 위험이 높아 세션을 중단한다`,
+      confidence: 1,
+    };
+  }
+
+  if (level >= PAIN_LEVEL_SWAP) {
+    return {
+      kind: 'exerciseSwap',
+      reasoning: `${where} 강도 ${level} — 해당 부위를 피하는 운동으로 교체를 제안한다`,
+      confidence: 1,
+    };
+  }
+
+  return {
+    kind: 'continue',
+    reasoning: `${where} 강도 ${level} — 경고 후 진행하되 악화 시 즉시 보고하도록 안내한다`,
+    confidence: 1,
+  };
+}
+
 /**
  * 사용자 의도 + 엔진 액션으로 결정적 PolicyDecision을 합성한다.
  *
  * chat용 — 의도 분류 결과를 정책 LLM 없이 결정으로 변환한다.
- * CompleteSet + 조정 없음 → continue, 엔진 액션이 있으면 weightAdjustment.
+ * 통증 보고가 최우선, 그다음 엔진 액션, 나머지는 continue.
  */
 export function synthesizeDecision(
   intent: Intent,
   engineAction: ProgressiveOverloadAction | null,
 ): PolicyDecision {
+  if (intent.kind === 'ReportPain') {
+    return decidePainResponse(intent.areas, intent.level);
+  }
+
   if (engineAction !== null && 'adjustment' in engineAction) {
     return {
       kind: 'weightAdjustment',

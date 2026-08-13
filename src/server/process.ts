@@ -67,6 +67,7 @@ export function chunkMessage(message: string): string[] {
  * `CompleteSet`은 RPE를 모르는 채로 기록한다 — 회원이 보고하기 전까지 `undefined`.
  * `ReportRPE`는 직전 세트에 실제 값을 채운다. 채울 세트가 없으면(세트 완료 전 보고)
  * 기록할 곳이 없으므로 상태를 바꾸지 않는다.
+ * `ReportPain`은 컨디션에 부위·강도를 남긴다 — 이후 정책 판단의 입력이 된다.
  */
 function applyIntent(record: SessionRecord, intent: Intent): void {
   const { state } = record;
@@ -91,6 +92,13 @@ function applyIntent(record: SessionRecord, intent: Intent): void {
     if (lastSet === undefined) return;
     const { rpe } = intent;
     lastSet.rpe = rpe;
+    return;
+  }
+
+  if (intent.kind === 'ReportPain') {
+    const { areas, level } = intent;
+    state.policy.condition.painAreas = areas;
+    state.policy.condition.painLevel = level;
   }
 }
 
