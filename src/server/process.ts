@@ -12,7 +12,7 @@ import type { ProgressiveOverloadAction } from '../domain/progressive-overload.t
 import type { ExpressionLLM } from '../llm/expression.ts';
 import type { IntentClassifier } from '../llm/intent.ts';
 import type { PolicyDecision } from '../llm/policy.ts';
-import type { SessionStore } from './session-store.ts';
+import type { SessionRecord, SessionStore } from './session-store.ts';
 
 export interface ProcessDeps {
   intent: IntentClassifier;
@@ -37,6 +37,9 @@ export interface ServerBrain {
 /** 청크당 최대 글자 수 */
 const MAX_CHUNK_LENGTH = 30;
 
+/** Array.at()으로 마지막 요소를 가리키는 인덱스 */
+const LAST_INDEX = -1;
+
 /**
  * 표현 결과를 단어 기준 최대 30자씩 끊어 청크 배열로 반환한다.
  * 공백은 유지하고 빈 청크는 제외한다. 결정적이며 여러 단어면 2개 이상 청크를 보장한다.
@@ -58,6 +61,39 @@ export function chunkMessage(message: string): string[] {
   return chunks;
 }
 
+/**
+ * 의도를 세션의 세계 상태에 반영한다.
+ *
+ * `CompleteSet`은 RPE를 모르는 채로 기록한다 — 회원이 보고하기 전까지 `undefined`.
+ * `ReportRPE`는 직전 세트에 실제 값을 채운다. 채울 세트가 없으면(세트 완료 전 보고)
+ * 기록할 곳이 없으므로 상태를 바꾸지 않는다.
+ */
+function applyIntent(record: SessionRecord, intent: Intent): void {
+  const { state } = record;
+
+  if (intent.kind === 'CompleteSet') {
+    state.recentHistory.push({
+      id: crypto.randomUUID(),
+      sessionId: record.id,
+      exerciseId: state.exerciseId,
+      setNumber: state.recentHistory.length + 1,
+      plannedReps: state.currentSet.reps,
+      // 실제 수행 반복은 CompleteSet에 파라미터가 없어 계획치로 둔다.
+      actualReps: state.currentSet.reps,
+      completed: true,
+      performedAt: new Date(),
+    });
+    return;
+  }
+
+  if (intent.kind === 'ReportRPE') {
+    const lastSet = state.recentHistory.at(LAST_INDEX);
+    if (lastSet === undefined) return;
+    const { rpe } = intent;
+    lastSet.rpe = rpe;
+  }
+}
+
 export function createServerBrain(
   deps: ProcessDeps,
   store: SessionStore,
@@ -70,19 +106,7 @@ export function createServerBrain(
       const record = store.session(sessionId);
       const intent = await deps.intent.classify(normalizeUtterance(text));
 
-      if (intent.kind === 'CompleteSet') {
-        record.state.recentHistory.push({
-          id: crypto.randomUUID(),
-          sessionId,
-          exerciseId: record.state.exerciseId,
-          setNumber: record.state.recentHistory.length + 1,
-          plannedReps: record.state.currentSet.reps,
-          actualReps: record.state.currentSet.reps,
-          rpe: 8,
-          completed: true,
-          performedAt: new Date(),
-        });
-      }
+      applyIntent(record, intent);
 
       const result = await runDecisionPipeline(record.state, {});
       const decision = synthesizeDecision(intent, result.engineAction);

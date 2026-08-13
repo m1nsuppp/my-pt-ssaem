@@ -50,6 +50,57 @@ describe('createServerBrain.processUtterance', () => {
     expect(store.session('123').state.recentHistory).toHaveLength(0);
   });
 
+  test('CompleteSet은 RPE 없이 기록 — 보고 전까지 값을 지어내지 않음', async () => {
+    const { brain, store } = makeBrain();
+    await brain.processUtterance('123', '1세트 끝났어');
+    expect(store.session('123').state.recentHistory[0]?.rpe).toBeUndefined();
+  });
+
+  test('ReportRPE 발화 → 직전 세트에 실제 RPE가 기록됨', async () => {
+    const { brain, store } = makeBrain();
+    await brain.processUtterance('123', '1세트 끝났어');
+    await brain.processUtterance('123', 'rpe 9');
+
+    const { state } = store.session('123');
+    expect(state.recentHistory).toHaveLength(1);
+    expect(state.recentHistory[0]?.rpe).toBe(9);
+  });
+
+  test('완료한 세트가 없을 때의 RPE 보고는 상태를 바꾸지 않음', async () => {
+    const { brain, store } = makeBrain();
+    await brain.processUtterance('123', 'rpe 9');
+    expect(store.session('123').state.recentHistory).toHaveLength(0);
+  });
+
+  test('RPE 9 세트를 3회 보고 → 디로드 판정 (기본 규칙: RPE 9 × 3세트 → -5kg)', async () => {
+    const { brain } = makeBrain();
+
+    await brain.processUtterance('123', '1세트 끝났어');
+    await brain.processUtterance('123', 'rpe 9');
+    await brain.processUtterance('123', '2세트 끝났어');
+    await brain.processUtterance('123', 'rpe 9');
+    await brain.processUtterance('123', '3세트 끝났어');
+    const result = await brain.processUtterance('123', 'rpe 9');
+
+    expect(result.engineAction?.type).toBe('weightAdjustment');
+    expect(result.decision.kind).toBe('weightAdjustment');
+    expect(result.decision.details?.weightDelta).toBe(-5);
+  });
+
+  test('RPE 8 세트를 3회 보고 → 임계 미달로 조정 없음', async () => {
+    const { brain } = makeBrain();
+
+    await brain.processUtterance('123', '1세트 끝났어');
+    await brain.processUtterance('123', 'rpe 8');
+    await brain.processUtterance('123', '2세트 끝났어');
+    await brain.processUtterance('123', 'rpe 8');
+    await brain.processUtterance('123', '3세트 끝났어');
+    const result = await brain.processUtterance('123', 'rpe 8');
+
+    expect(result.engineAction).toBeNull();
+    expect(result.decision.kind).toBe('continue');
+  });
+
   test('message delta 이벤트 합침 == done.message (chunk 단위 SSE 전송 계약)', async () => {
     const { brain, store } = makeBrain();
     const deltas: string[] = [];
