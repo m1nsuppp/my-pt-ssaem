@@ -30,6 +30,14 @@ CONTEXT.md 도메인 모델 대비 미구현 갭을 우선순위 순으로 정�
 - [ ] `StartSession` / `EndSession` / `PauseSession` / `ResumeSession` → 상태 머신 전이와 연결
 - [ ] `ReportPain` → 부상 대응 3단계(필터링/경고/제안)의 최소 버전: 통증 강도 1~3 경고, 4~6 교체 제안, 7~10 중단 권고
 - [ ] Intent 분류기(OpenRouter)가 도메인 Intent 22종 중 8종만 지원 → 위에서 처리하는 의도만큼 분류 범위 확장
+- [ ] **코어 추출** — `processUtterance`에서 `SessionStore` 결합을 분리해 엔트리 공용 코어로.
+      현재 `cli.ts runChat`과 `server/process.ts`가 같은 4단계(classify → pipeline → synthesize → express)를
+      각각 필사하고 있고, 이것이 `server → cli` 역방향 import의 원인. 코어가 생기면 엔트리는 I/O만 담당.
+- [ ] **CLI 정리** (코어 추출과 동시) — `src/cli.ts` 삭제 + `package.json`의 `bin`/`start`/`dev` 제거.
+      `chat`은 서버 `/utterance`의 상태 없는 복제본(`recentHistory: []` 고정 → 엔진이 구조적으로 항상 `null`).
+      `simulate`가 하던 시나리오 주입·엔진 판정 검증은 이미 `scenarios.spec.ts`/`pipeline.spec.ts`가 수행.
+      유일한 실손실인 `--llm`(실 LLM 육안 확인)은 #7 평가 하네스의 채점 러너로 복원한다.
+      `src/cli/*.ts`는 서버가 쓰는 공용 코드이므로 삭제가 아니라 중립 경로로 이동, `scenarios/*.json`은 존치.
 
 ### 3. 결정 엔진 규칙 체이닝
 `src/engine/decision-engine.ts`가 단일 규칙(RPE Deload)만 수용. "규칙 체이닝/우선순위는 후속 이슈로 미룬다" 명시된 부채.
