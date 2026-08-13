@@ -100,5 +100,5 @@ PolicyLLM이 simulate 경로에서만 쓰이고 chat/서버 경로는 `synthesiz
 
 - [x] `bun test` 스크립트가 package.json에 없음 (`check`에 테스트 미포함) → 추가
 - [x] GitHub Actions CI 부재 (`.github`에 PR 템플릿뿐) → `bun run check` + `bun test` 워크플로
-- [ ] CONTEXT.md 오타: "울동" → "운동" (3곳, 제약 모델 섹션)
+- [x] CONTEXT.md 오타: "울동" → "운동" (제약 모델·매칭 엔진 섹션 4곳)
 - [ ] 서버 CORS `ALLOWED_ORIGIN = '*'` + secret 미설정 시 무인증 — 공개 배포 전 재검토
