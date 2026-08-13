@@ -129,6 +129,31 @@ describe('createServerBrain.processUtterance', () => {
     expect(store.session('123').state.recentHistory).toHaveLength(0);
   });
 
+  test('무게 지정 발화 → currentSet 무게가 그 값으로 갱신됨', async () => {
+    const { brain, store } = makeBrain();
+    await brain.processUtterance('123', '무게 80');
+    expect(store.session('123').state.currentSet.weightKg).toBe(80);
+  });
+
+  test('증량 발화 → 기본 스텝만큼 오름', async () => {
+    const { brain, store } = makeBrain();
+    await brain.processUtterance('123', '무게 올려');
+    expect(store.session('123').state.currentSet.weightKg).toBe(105);
+  });
+
+  test('감량 발화 → 기본 스텝만큼 내려감', async () => {
+    const { brain, store } = makeBrain();
+    await brain.processUtterance('123', '무게 내려');
+    expect(store.session('123').state.currentSet.weightKg).toBe(95);
+  });
+
+  test('감량이 반복돼도 음수 무게가 되지 않음', async () => {
+    const { brain, store } = makeBrain();
+    await brain.processUtterance('123', '무게 0');
+    await brain.processUtterance('123', '무게 내려');
+    expect(store.session('123').state.currentSet.weightKg).toBe(0);
+  });
+
   test('message delta 이벤트 합침 == done.message (chunk 단위 SSE 전송 계약)', async () => {
     const { brain, store } = makeBrain();
     const deltas: string[] = [];

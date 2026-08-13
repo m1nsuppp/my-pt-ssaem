@@ -40,6 +40,9 @@ const MAX_CHUNK_LENGTH = 30;
 /** Array.at()으로 마지막 요소를 가리키는 인덱스 */
 const LAST_INDEX = -1;
 
+/** 조정 폭을 지정하지 않은 증감 요청에 적용할 기본 스텝(kg) */
+const LOAD_STEP_KG = 5;
+
 /**
  * 표현 결과를 단어 기준 최대 30자씩 끊어 청크 배열로 반환한다.
  * 공백은 유지하고 빈 청크는 제외한다. 결정적이며 여러 단어면 2개 이상 청크를 보장한다.
@@ -99,7 +102,36 @@ function applyIntent(record: SessionRecord, intent: Intent): void {
     const { areas, level } = intent;
     state.policy.condition.painAreas = areas;
     state.policy.condition.painLevel = level;
+    return;
   }
+
+  applyLoadIntent(record, intent);
+}
+
+/**
+ * 무게 조정 의도를 계획 세트에 반영한다.
+ *
+ * 맨몸 운동(`weightKg === null`)은 조정 대상이 아니고, 음수 무게는 만들지 않는다.
+ * `IncreaseLoad`/`DecreaseLoad`는 조정 폭이 없는 의도라 기본 스텝을 적용한다.
+ */
+function applyLoadIntent(record: SessionRecord, intent: Intent): void {
+  const { state } = record;
+  const { currentSet } = state;
+
+  if (intent.kind === 'SetLoadTo') {
+    const { valueKg } = intent;
+    if (valueKg < 0) return;
+    currentSet.weightKg = valueKg;
+    return;
+  }
+
+  if (intent.kind !== 'IncreaseLoad' && intent.kind !== 'DecreaseLoad') return;
+
+  const { weightKg } = currentSet;
+  if (weightKg === null) return;
+
+  const delta = intent.kind === 'IncreaseLoad' ? LOAD_STEP_KG : -LOAD_STEP_KG;
+  currentSet.weightKg = Math.max(0, weightKg + delta);
 }
 
 export function createServerBrain(
