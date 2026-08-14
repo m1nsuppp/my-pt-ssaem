@@ -160,6 +160,40 @@ describe('createServerBrain.processUtterance', () => {
     expect(state.policy.condition.painLevel).toBe(8);
   });
 
+  test('중간 통증의 교체 제안은 미집행으로 응답에 드러남', async () => {
+    const { brain } = makeBrain();
+    const result = await brain.processUtterance('123', '무릎이 5 정도로 아파');
+
+    expect(result.decision.kind).toBe('exerciseSwap');
+    expect(result.outcome).toBe('unsupported');
+  });
+
+  test('미집행 결정은 SSE decision 이벤트에도 그대로 실림', async () => {
+    const { brain, store } = makeBrain();
+    const events: SessionEvent[] = [];
+    store.subscribe('123', (event) => {
+      events.push(event);
+    });
+
+    await brain.processUtterance('123', '무릎이 5 정도로 아파');
+
+    const decisionEvent = events.find((event) => event.type === 'decision');
+    expect(decisionEvent?.outcome).toBe('unsupported');
+  });
+
+  test('집행된 디로드는 applied로 구분됨', async () => {
+    const { brain } = makeBrain();
+
+    await brain.processUtterance('123', '1세트 끝났어');
+    await brain.processUtterance('123', 'rpe 9');
+    await brain.processUtterance('123', '2세트 끝났어');
+    await brain.processUtterance('123', 'rpe 9');
+    await brain.processUtterance('123', '3세트 끝났어');
+    const result = await brain.processUtterance('123', 'rpe 9');
+
+    expect(result.outcome).toBe('applied');
+  });
+
   test('통증 발화는 세트 완료 키워드보다 우선 분류됨', async () => {
     const { brain, store } = makeBrain();
     const result = await brain.processUtterance(

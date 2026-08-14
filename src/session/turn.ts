@@ -34,11 +34,27 @@ export interface TurnInput {
   text: string;
 }
 
+/**
+ * 결정이 실제로 세계에 반영되었는지.
+ *
+ * 시스템이 아직 집행할 수 없는 결정을 성공처럼 흘려보내지 않기 위해, 집행 여부를
+ * 결정과 함께 밖으로 내보낸다. 미구현은 미구현으로 보여야 한다.
+ */
+export type DecisionOutcome =
+  /** 세계 상태 또는 세션 진행 상태가 실제로 바뀌었다 */
+  | 'applied'
+  /** 집행할 것이 없는 결정 — 계획대로 진행 */
+  | 'noop'
+  /** 집행해야 하지만 아직 그럴 수단이 없다 */
+  | 'unsupported';
+
 /** 턴 처리 결과 — 세계 상태는 `state`에 반영되어 있고, 진행 상태는 `context`로 돌려준다. */
 export interface TurnResult {
   intent: Intent;
   engineAction: ProgressiveOverloadAction | null;
   decision: PolicyDecision;
+  /** 위 결정이 집행되었는지 — `unsupported`면 말만 하고 세계는 그대로다. */
+  outcome: DecisionOutcome;
   message: string;
   context: SessionStateContext;
 }
@@ -150,29 +166,69 @@ export function applyIntent(
 /**
  * 결정을 세계 상태에 집행한다 — 발화보다 먼저 세계가 바뀐다.
  *
- * `weightAdjustment`만 집행 대상이다. `sessionEnd`/`exerciseSwap`은 세션 상태 머신과
- * 운동 DB가 전제라 아직 집행하지 못하고 발화로만 전달된다.
+ * `weightAdjustment`만 이 함수의 집행 대상이다. `sessionEnd`/`pause`는 세션 상태 머신이
+ * 집행하므로 여기서는 판정하지 않고 `processTurn`에 넘긴다.
+ *
+ * `deload`/`exerciseSwap`은 프로그램 재설계와 운동 카탈로그가 전제라 아직 집행 수단이 없다.
+ * 조용히 버리면 회원에게는 교체가 된 것처럼 보이므로, `unsupported`로 드러낸다.
  */
 export function applyDecision(
   state: ScenarioState,
   decision: PolicyDecision,
-): void {
+): DecisionOutcome {
+  if (decision.kind === 'deload' || decision.kind === 'exerciseSwap') {
+    return 'unsupported';
+  }
+
   if (decision.kind !== 'weightAdjustment') {
-    return;
+    return 'noop';
   }
 
   const delta = decision.details?.weightDelta;
   if (delta === undefined) {
-    return;
+    return 'unsupported';
   }
 
   const { currentSet } = state;
   const { weightKg } = currentSet;
   if (weightKg === null) {
-    return;
+    // 맨몸 운동에는 무게 조정을 집행할 수 없다.
+    return 'unsupported';
   }
 
   changeWeight(state, Math.max(0, weightKg + delta));
+
+  return 'applied';
+}
+
+/** 집행 수단이 없다는 사실을 결정 사유에 남긴다 — 표현 계층은 이 사유를 읽고 말한다. */
+const UNSUPPORTED_NOTE =
+  '아직 자동으로 집행할 수단이 없어, 안내만 하고 실제로 바꾸지는 못한다';
+
+function withUnsupportedNote(decision: PolicyDecision): PolicyDecision {
+  return {
+    ...decision,
+    reasoning: `${decision.reasoning} — ${UNSUPPORTED_NOTE}`,
+  };
+}
+
+/**
+ * 턴 전체 관점에서 집행 여부를 판정한다.
+ *
+ * 생명주기 결정은 세계 상태가 아니라 세션 상태 머신이 집행하므로, 전이가 실제로
+ * 일어났는지로 판단한다 — 종착 상태에서의 종료 결정처럼 전이가 막힌 경우를 걸러낸다.
+ */
+function resolveOutcome(
+  decision: PolicyDecision,
+  stateOutcome: DecisionOutcome,
+  before: SessionState,
+  after: SessionState,
+): DecisionOutcome {
+  if (decision.kind === 'sessionEnd' || decision.kind === 'pause') {
+    return before === after ? 'noop' : 'applied';
+  }
+
+  return stateOutcome;
 }
 
 /**
@@ -247,6 +303,9 @@ function decideLifecycle(
  *
  * 세션 상태 전이는 의도로 한 번, 결정이 세션 종료면 한 번 더 적용된다 —
  * 통증 같은 비-생명주기 의도에서 나온 종료 결정도 실제로 집행되어야 한다.
+ *
+ * 집행하지 못한 결정은 그 사실을 사유에 적어 표현 계층에 넘긴다. 회원에게 나가는 말이
+ * 실제로 일어난 일과 어긋나면 안 된다.
  */
 export async function processTurn(
   input: TurnInput,
@@ -263,22 +322,32 @@ export async function processTurn(
     decideLifecycle(intent, context.currentState, afterIntent.currentState) ??
     synthesizeDecision(intent, result.engineAction);
 
-  applyDecision(state, decision);
+  const stateOutcome = applyDecision(state, decision);
 
   const nextContext =
     decision.kind === 'sessionEnd' && intent.kind !== 'EndSession'
       ? applyTransition(afterIntent, 'EndSession')
       : afterIntent;
 
-  const message = await deps.expression.express({
+  const outcome = resolveOutcome(
     decision,
+    stateOutcome,
+    context.currentState,
+    nextContext.currentState,
+  );
+  const reported =
+    outcome === 'unsupported' ? withUnsupportedNote(decision) : decision;
+
+  const message = await deps.expression.express({
+    decision: reported,
     persona: state.persona,
   });
 
   return {
     intent,
     engineAction: result.engineAction,
-    decision,
+    decision: reported,
+    outcome,
     message,
     context: nextContext,
   };
