@@ -8,7 +8,7 @@
 import type { Intent } from '../domain/intent.ts';
 import type { ProgressiveOverloadAction } from '../domain/progressive-overload.ts';
 import type { PolicyDecision } from '../llm/policy.ts';
-import type { TurnDeps } from '../session/turn.ts';
+import type { DecisionOutcome, TurnDeps } from '../session/turn.ts';
 import { processTurn } from '../session/turn.ts';
 import type { SessionStore } from './session-store.ts';
 
@@ -19,6 +19,8 @@ export interface ProcessedResult {
   intent: Intent;
   engineAction: ProgressiveOverloadAction | null;
   decision: PolicyDecision;
+  /** 결정이 집행되었는지 — `unsupported`면 말만 하고 세계는 그대로다. */
+  outcome: DecisionOutcome;
   message: string;
 }
 
@@ -70,7 +72,8 @@ export function createServerBrain(
         { sessionId, state: record.state, context: record.context, text },
         deps,
       );
-      const { intent, engineAction, decision, message, context } = turn;
+      const { intent, engineAction, decision, outcome, message, context } =
+        turn;
 
       store.updateContext(sessionId, context);
 
@@ -79,7 +82,7 @@ export function createServerBrain(
         type: 'engine_action',
         action: engineAction,
       });
-      store.pushEvent(sessionId, { type: 'decision', decision });
+      store.pushEvent(sessionId, { type: 'decision', decision, outcome });
       store.pushEvent(sessionId, {
         type: 'state',
         state: context.currentState,
@@ -89,7 +92,7 @@ export function createServerBrain(
       }
       store.pushEvent(sessionId, { type: 'done', message, sessionId });
 
-      return { sessionId, intent, engineAction, decision, message };
+      return { sessionId, intent, engineAction, decision, outcome, message };
     },
   };
 }

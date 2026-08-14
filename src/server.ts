@@ -149,6 +149,7 @@ async function handleUtterance(id: string, req: Request): Promise<Response> {
       intent: result.intent,
       engineAction: result.engineAction,
       decision: result.decision,
+      outcome: result.outcome,
       message: result.message,
     });
   } catch (err) {

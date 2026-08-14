@@ -112,3 +112,67 @@ describe('processTurn — 통증으로 인한 세션 종료 집행', () => {
     expect(result?.context.currentState).toBe(SessionState.MainWorkout);
   });
 });
+
+describe('processTurn — 집행하지 못한 결정을 성공처럼 내보내지 않음', () => {
+  test('중간 통증의 운동 교체 제안은 집행되지 않았음이 드러남', async () => {
+    const [result] = await say(['무릎이 5 정도로 아파']);
+
+    expect(result?.decision.kind).toBe('exerciseSwap');
+    expect(result?.outcome).toBe('unsupported');
+  });
+
+  test('교체 제안을 받아도 운동은 그대로다', async () => {
+    const state = structuredClone(DEFAULT_CHAT_STATE);
+    const result = await processTurn(
+      {
+        sessionId: 'turn-spec',
+        state,
+        context: contextAt(SessionState.MainWorkout),
+        text: '무릎이 5 정도로 아파',
+      },
+      deps,
+    );
+
+    expect(result.outcome).toBe('unsupported');
+    expect(state.exerciseId).toBe(DEFAULT_CHAT_STATE.exerciseId);
+  });
+
+  test('집행하지 못한 사실이 회원에게 나가는 말에도 담김', async () => {
+    const [result] = await say(['무릎이 5 정도로 아파']);
+
+    expect(result?.message).toContain('실제로 바꾸지는 못한다');
+  });
+
+  test('강한 통증의 세션 중단은 실제로 집행됨', async () => {
+    const [result] = await say(['무릎이 8 정도로 아파']);
+
+    expect(result?.outcome).toBe('applied');
+  });
+
+  test('부하 조정 없는 세트 완료는 집행할 것이 없음', async () => {
+    const [result] = await say(['1세트 끝났어']);
+
+    expect(result?.outcome).toBe('noop');
+  });
+
+  test('디로드 판정은 집행됨', async () => {
+    const results = await say([
+      '1세트 끝났어',
+      'rpe 9',
+      '2세트 끝났어',
+      'rpe 9',
+      '3세트 끝났어',
+      'rpe 9',
+    ]);
+
+    expect(results.at(-1)?.decision.kind).toBe('weightAdjustment');
+    expect(results.at(-1)?.outcome).toBe('applied');
+  });
+
+  test('종착 상태에서는 종료 요청이 거절되어 집행할 것이 없음', async () => {
+    const [result] = await say(['운동 종료'], SessionState.Completed);
+
+    expect(result?.decision.kind).toBe('continue');
+    expect(result?.outcome).toBe('noop');
+  });
+});

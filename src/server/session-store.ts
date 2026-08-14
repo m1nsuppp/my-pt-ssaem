@@ -11,13 +11,14 @@ import type { SessionStateContext } from '../domain/session-state.ts';
 import { SessionState } from '../domain/session-state.ts';
 import type { PolicyDecision } from '../llm/policy.ts';
 import type { ScenarioState } from '../session/scenarios.ts';
+import type { DecisionOutcome } from '../session/turn.ts';
 
 /** SSE 스트림의 페이로드이자 저장소 버퍼의 항목. */
 export type SessionEvent =
   | { type: 'session_started'; sessionId: string }
   | { type: 'intent'; intent: Intent }
   | { type: 'engine_action'; action: ProgressiveOverloadAction | null }
-  | { type: 'decision'; decision: PolicyDecision }
+  | { type: 'decision'; decision: PolicyDecision; outcome: DecisionOutcome }
   | { type: 'state'; state: SessionState }
   | { type: 'message'; delta: string }
   | { type: 'done'; message: string; sessionId: string }
